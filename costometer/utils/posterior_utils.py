@@ -29,7 +29,7 @@ def marginalize_out_for_data_set(
     :return:
     """
     marginal_probabilities = {
-        parameter: [] for parameter in cost_parameter_args + ["temp"]
+        parameter: [] for parameter in cost_parameter_args
     }
     sim_cols = [col for col in list(data) if "sim_" in col]
     for _, identifying_values in (
@@ -51,7 +51,7 @@ def marginalize_out_for_data_set(
                 )
             ]
         )
-        for parameter in cost_parameter_args + ["temp"]:
+        for parameter in cost_parameter_args:
             parameter_probabilities = marginalize_out_variables(
                 curr_subset, loglik_field, parameter
             )

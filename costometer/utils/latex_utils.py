@@ -39,6 +39,9 @@ def get_kruskal_wallis_text(comparison):
 
 
 def get_correlation_text(correlation):
+    if np.any(np.isnan(correlation["CI95%"][0])):
+        return "Potentially no variance of one parameter..."
+
     if "pearson" in correlation.index.values:
         return (
             f"$r({correlation['n'].values[0]}) = {correlation['r'].values[0]:.2f}, "

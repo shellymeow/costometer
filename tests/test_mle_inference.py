@@ -53,7 +53,6 @@ inference_cost_parameters = {
 }
 
 
-# similar to Kubala test cases
 # this time we want two: one for small_increasing and one for small_decreasing
 # in each, all three traces are evaluated
 @pytest.fixture(params=mle_test_data)

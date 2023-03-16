@@ -1,5 +1,6 @@
 """Utility functions for MAP calculation, priors and finding the best parameters."""
-from itertools import product
+import json
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
@@ -10,50 +11,16 @@ import yaml
 from more_itertools import powerset
 from mouselab.cost_functions import *  # noqa
 from mouselab.distributions import Categorical
-from mouselab.policies import RandomPolicy, SoftmaxPolicy
+from mouselab.graph_utils import get_structure_properties
+from mouselab.policies import SoftmaxPolicy
 from scipy import stats  # noqa
 from scipy.stats import rv_continuous
 from statsmodels.tools.eval_measures import bic
 
 from costometer.agents import SymmetricMouselabParticipant
-from costometer.utils.cost_utils import get_param_string, load_q_file
+from costometer.utils.cost_utils import adjust_state, get_state_action_values
 from costometer.utils.plotting_utils import generate_model_palette
-from costometer.utils.trace_utils import (
-    get_trajectories_from_participant_data,
-    traces_to_df,
-)
-
-
-def recalculate_maps_from_mles(
-    data: pd.DataFrame, full_priors: Dict[str, Dict[Any, Any]]
-) -> pd.DataFrame:
-    """# noqa: E501
-    Used to recalculate MAPs from MLEs.
-    Needed because sometimes on the cluster you might only submit one temperature or cost combination at a time.
-
-    :param data:
-    :param full_priors:
-    :return:
-    """
-    mle_cols = [col for col in list(data) if "mle" in col]
-
-    for prior_name, prior_dict in full_priors.items():
-        for mle_field in mle_cols:
-            map_field = mle_field.replace("mle", "map")
-            # map column will be incorrect for static inference as
-            # cost prior is not added in, so fine to overwrite
-            data[f"{map_field}_{prior_name}"] = data.apply(
-                lambda row: row[mle_field]
-                + np.sum(
-                    [
-                        np.log(prior_dict[param_key][row[param_key]])
-                        for param_key in prior_dict.keys()
-                    ]
-                ),
-                axis=1,
-            )
-
-    return data
+from costometer.utils.trace_utils import get_trajectories_from_participant_data
 
 
 def get_best_parameters(
@@ -71,99 +38,65 @@ def get_best_parameters(
     """
     best_parameter_values = {}
 
-    mle_cols = [col for col in list(df) if "mle" in col]
-    final_map_cols = [col for col in list(df) if "map_" in col]
+    # reset index's df for the indexing by best row
+    df = df.reset_index()
 
-    best_parameter_values["SoftmaxPolicy"] = {}
-    best_parameter_values["Group"] = {}
-    for metric in mle_cols + final_map_cols:
-        best_parameter_values["SoftmaxPolicy"][metric] = {}
-        best_parameter_values["Group"][metric] = {}
-
-        relevant_columns = [
-            col for col in list(df) if col not in mle_cols + final_map_cols
-        ] + [metric]
-
-        for subset in powerset(cost_details["constant_values"]):
-            curr_data = df[
-                df.apply(
-                    lambda row: sum(
-                        row[cost_param] == cost_details["constant_values"][cost_param]
-                        for cost_param in list(subset)
+    for prior_type, prior_dict in priors.items():
+        # save best parameters for each prior
+        best_parameter_values[prior_type] = {}
+        # uniform should always be provided
+        for subset in powerset(priors["uniform"]):
+            # subset dataframe
+            curr_data = (
+                df[
+                    df.apply(
+                        lambda row: sum(
+                            row[cost_param]
+                            == cost_details["constant_values"][cost_param]
+                            for cost_param in list(subset)
+                        )
+                        == len(list(subset)),
+                        axis=1,
                     )
-                    == len(list(subset)),
-                    axis=1,
-                )
-            ]
+                ]
+                .copy(deep=True)
+                .reset_index(drop=True)
+            )
 
+            # add prior
+            curr_data[f"map_{prior_type}"] = curr_data.apply(
+                lambda row: row["mle"]
+                + sum(
+                    [
+                        np.log(prior_dict[param][row[param]])
+                        for param in prior_dict.keys()
+                        if param not in subset
+                    ]
+                ),
+                axis=1,
+            )
+
+            # when multiple pids included,
+            # some might be duplicated (e.g. pid 0 with sim cost 1 vs 2)
             sim_cols = [col for col in list(curr_data) if "sim_" in col]
-            best_param_rows = df.loc[
-                curr_data.groupby(["trace_pid"] + sim_cols).idxmax()[metric]
-            ]
 
-            # correct map for submodels before saving
-            if "map" in metric:
-                prior_name = metric.split("_")[-1]
-                best_param_rows[metric] = best_param_rows.apply(
-                    lambda row: row[metric]
-                    - sum(
-                        [
-                            np.log(priors[prior_name][param][row[param]])
-                            for param in subset
-                        ]
-                    ),
-                    axis=1,
-                )
-
-            best_parameter_values["SoftmaxPolicy"][metric][subset] = best_param_rows[
-                relevant_columns
+            best_param_rows = curr_data.loc[  #
+                curr_data.groupby(["trace_pid"] + sim_cols).idxmax(numeric_only=True)[
+                    f"map_{prior_type}"
+                ]
             ]
-            assert len(best_param_rows) == len(
-                curr_data.drop_duplicates(subset=["trace_pid"] + sim_cols)
+            assert np.all(
+                [
+                    counter == 1
+                    for pid, counter in Counter(
+                        best_param_rows[["trace_pid"] + sim_cols]
+                        .to_records(index=False)
+                        .tolist()
+                    ).most_common()
+                ]
             )
 
-            # TODO had bare except here E722
-            best_group_parameters = (
-                curr_data.groupby(
-                    list(cost_details["constant_values"].keys()) + ["temp"]
-                )
-                .sum()
-                .idxmax()[metric]
-            )
-
-            best_group_param_rows = df[
-                df.apply(
-                    lambda row: np.all(
-                        [
-                            row[cost_parameter_arg] == val
-                            for cost_parameter_arg, val in list(
-                                zip(
-                                    list(cost_details["constant_values"].keys())
-                                    + ["temp"],
-                                    best_group_parameters,
-                                )
-                            )
-                        ]
-                    ),
-                    axis=1,
-                )
-            ].reset_index(drop=True)
-
-            # correct map for submodels before saving
-            if "map" in metric:
-                prior_name = metric.split("_")[-1]
-                best_group_param_rows[metric] = best_group_param_rows.apply(
-                    lambda row: row[metric]
-                    - sum(
-                        [
-                            np.log(priors[prior_name][param][row[param]])
-                            for param in subset
-                        ]
-                    ),
-                    axis=1,
-                )
-
-            best_parameter_values["Group"][metric][subset] = best_group_param_rows
+            best_parameter_values[prior_type][subset] = best_param_rows
 
     return best_parameter_values
 
@@ -172,12 +105,14 @@ def add_cost_priors_to_temp_priors(
     softmax_df: pd.DataFrame,
     cost_details: Dict[str, Any],
     temp_prior_details: Dict[str, Any],
+    additional_params=List[str],
 ) -> Dict[str, Dict[str, Any]]:
     """
 
     :param softmax_df:
     :param cost_details:
     :param temp_prior_details:
+    :param additional_params:
     :return:
     """
     full_priors = {}
@@ -190,7 +125,11 @@ def add_cost_priors_to_temp_priors(
             inverse=prior_inputs["inverse"],
         )
         priors["temp"] = dict(zip(temp_prior.vals, temp_prior.probs))
-        for cost_parameter_arg in cost_details["constant_values"]:
+
+        non_temp_params = set(
+            list(cost_details["constant_values"]) + additional_params
+        ) - set(["temp"])
+        for cost_parameter_arg in non_temp_params:
             numeric_values = softmax_df[cost_parameter_arg][
                 softmax_df[cost_parameter_arg].apply(
                     lambda entry: not isinstance(entry, str)
@@ -209,7 +148,9 @@ def add_cost_priors_to_temp_priors(
 
 
 def extract_mles_and_maps(
-    data: pd.DataFrame, cost_details: Dict[str, Any], priors: Dict[Any, Any]
+    data: pd.DataFrame,
+    cost_details: Dict[str, Any],
+    priors: Dict[Any, Any],
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """
 
@@ -220,22 +161,11 @@ def extract_mles_and_maps(
     """
     # save random data first
     best_parameter_values = {}
-    random_data = data[data["applied_policy"] == "RandomPolicy"].reset_index(drop=True)
-    for cost_parameter_arg in cost_details["constant_values"].keys():
-        random_data[cost_parameter_arg] = np.nan
 
-    assert all(random_data.apply(lambda row: row["map"] == row["mle"], axis=1))
-    assert all(
-        random_data.apply(
-            lambda row: np.abs((row["training_mle"] + row["test_mle"]) - row["mle"])
-            < np.finfo(np.float32).eps,
-            axis=1,
-        )
-    )
-    relevant_columns = [
-        col for col in list(random_data) if "map" not in col and "mle" not in col
-    ] + ["test_mle"]
-    best_parameter_values["RandomPolicy"] = random_data[relevant_columns]
+    random_data = data[data["applied_policy"] == "RandomPolicy"].reset_index(drop=True)
+    for parameter_arg in priors["uniform"].keys():
+        random_data[parameter_arg] = np.nan
+    best_parameter_values["RandomPolicy"] = random_data
 
     # now only consider softmax policy
     softmax_data = data[data["applied_policy"] == "SoftmaxPolicy"].reset_index(
@@ -244,7 +174,7 @@ def extract_mles_and_maps(
 
     best_parameter_values = {
         **best_parameter_values,
-        **get_best_parameters(softmax_data, cost_details, priors),
+        "SoftmaxPolicy": get_best_parameters(softmax_data, cost_details, priors),
     }
     return best_parameter_values
 
@@ -269,43 +199,6 @@ def get_temp_prior(
         possible_vals, [rv.pdf(val) / normalizing_factor for val in rv_vals]
     )
     return categorical_dist
-
-
-def find_best_parameters(fitting_data_df, function="min", objective="loss"):
-    """
-
-    :param fitting_data_df:
-    :param function:
-    :param objective:
-    :return:
-    """
-    sim_cols = [col for col in list(fitting_data_df) if "sim_" in col]
-
-    best_values = (
-        fitting_data_df.groupby(["trace_pid"] + sim_cols)
-        .aggregate(function)[objective]
-        .to_dict()
-    )
-
-    if len(sim_cols) > 0:
-        best_param_rows = fitting_data_df[
-            fitting_data_df.apply(
-                lambda row: best_values[
-                    tuple([row[sim_col] for sim_col in ["trace_pid"] + sim_cols])
-                ]
-                == row["loss"],
-                axis=1,
-            )
-        ]
-
-    else:
-        best_param_rows = fitting_data_df[
-            fitting_data_df.apply(
-                lambda row: best_values[row["trace_pid"]] == row["loss"], axis=1
-            )
-        ]
-
-    return best_param_rows
 
 
 class AnalysisObject:
@@ -336,80 +229,43 @@ class AnalysisObject:
         if not hasattr(self, "palette_name"):
             self.palette_name = experiment_name
 
+        dfs = {}
+        for session in self.sessions:
+            matching_files = self.irl_path.glob(f"data/processed/{session}/*.csv")
+            for matching_file in matching_files:
+                curr_df = pd.read_csv(matching_file, index_col=0)
+                curr_df["session"] = session
+
+                if matching_file.stem not in dfs:
+                    dfs[matching_file.stem] = [curr_df]
+                else:
+                    dfs[matching_file.stem].append(curr_df)
+
+        self.dfs = {file_type: pd.concat(df_list) for file_type, df_list in dfs.items()}
+
         if not self.simulated:
-            self.individual_variables = pd.concat(
-                [
-                    pd.read_csv(
-                        self.irl_path.joinpath(
-                            f"data/processed/{session}/individual-variables.csv"
-                        )
-                    )
-                    for session in self.sessions
-                ]
-            )
-
-            self.mouselab_trials = pd.concat(
-                [
-                    pd.read_csv(
-                        self.irl_path.joinpath(
-                            f"data/processed/{session}/mouselab-mdp.csv"
-                        )
-                    )
-                    for session in self.sessions
-                ]
-            )
-
-            self.quest = pd.concat(
-                [
-                    pd.read_csv(
-                        self.irl_path.joinpath(
-                            f"data/processed/{session}/quiz-and-demo.csv"
-                        )
-                    )
-                    for session in self.sessions
-                ]
-            )
-
             self.load_session_details()
-            self.params = [""]
         else:
+            # create 'num_clicks'
+            self.dfs["mouselab-mdp"]["num_clicks"] = 1
+
+            # simulated data's block is always test
+            self.dfs["mouselab-mdp"]["block"] = "test"
+
+            # only keep relevant columns
+            simulated_cols = [
+                col for col in list(self.dfs["mouselab-mdp"]) if "sim_" in col
+            ]
+            self.dfs["mouselab-mdp"] = self.dfs["mouselab-mdp"][
+                simulated_cols + ["pid", "block", "num_clicks", "session"]
+            ].copy(deep=True)
+
             self.session_details = {
                 session: {
                     "experiment_setting": session.split("/")[1],
-                    "trials_per_block": None,
                 }
                 for session in self.sessions
             }
-            self.block = ["All"]
-
-            # currently only implemented for one cost function
-            assert len(self.cost_functions) == 1
-
-            if not self.params:
-                cost_strings = [
-                    get_param_string(
-                        dict(
-                            zip(
-                                self.cost_details[self.cost_functions[0]][
-                                    "cost_parameter_args"
-                                ],
-                                prod,
-                            )
-                        )
-                    )
-                    for prod in product(
-                        *[
-                            self.__getattribute__(param)
-                            for param in self.cost_details[self.cost_functions[0]][
-                                "cost_parameter_args"
-                            ]
-                        ]
-                    )
-                ]
-                self.params = [
-                    f"_{cost_string}_{temp:.2f}"
-                    for temp, cost_string in product(self.temp, cost_strings)
-                ]
 
         # only programmed correctly if all sessions have same experiment setting
         assert (
@@ -428,15 +284,19 @@ class AnalysisObject:
             for session_details in self.session_details.values()
         ][0]
 
+        yaml_path = self.irl_path.joinpath(
+            f"data/inputs/yamls/experiment_settings/{self.experiment_setting}.yaml"
+        )
+        with open(yaml_path, "r") as stream:
+            self.experiment_details = yaml.safe_load(stream)
+
         self.optimization_data = self.load_optimization_data()
 
         if not self.irl_path.joinpath(
             f"analysis/{self.experiment_subdirectory}/data/"
             f"{self.experiment_name}_models_palette.pickle"
         ).is_file():
-            static_palette = generate_model_palette(
-                self.optimization_data["Model Name"].unique()
-            )
+            static_palette = generate_model_palette(self.model_name_mapping.values())
             self.irl_path.joinpath(
                 f"analysis/{self.experiment_subdirectory}/data/"
             ).mkdir(parents=True, exist_ok=True)
@@ -450,13 +310,11 @@ class AnalysisObject:
                 pickle.dump(static_palette, f)
 
     def load_cost_function_details(self):
-        self.cost_details = {}
-        for cost_function in self.cost_functions:
-            yaml_file = self.irl_path.joinpath(
-                f"data/inputs/yamls/cost_functions/{cost_function}.yaml"
-            )
-            with open(str(yaml_file), "r") as stream:
-                self.cost_details[cost_function] = yaml.safe_load(stream)
+        yaml_file = self.irl_path.joinpath(
+            f"data/inputs/yamls/cost_functions/{self.cost_function}.yaml"
+        )
+        with open(str(yaml_file), "r") as stream:
+            self.cost_details = yaml.safe_load(stream)
 
     def load_session_details(self):
         self.session_details = {}
@@ -469,157 +327,138 @@ class AnalysisObject:
 
     def load_optimization_data(self):
         full_dfs = []
-        for cost_function in self.cost_functions:
-            cost_dfs = []
-            for session in self.sessions:
-                mle_and_map_files = [
-                    el
-                    for param in self.params
-                    for el in self.irl_path.glob(
-                        f"data/processed/{session}/{cost_function}"
-                        f"/mle_and_map{param}*.pickle"
-                    )
+        self.model_name_mapping = {}
+        mle_and_map_files = [
+            (
+                session,
+                self.irl_path.joinpath(
+                    f"data/processed/{session}/{self.cost_function}"
+                    f"/mle_and_map"
+                    f"{'_' + self.block if self.block != 'test' else ''}_{pid}.pickle"
+                ),
+            )
+            for session, pid in self.dfs["mouselab-mdp"][["session", "pid"]]
+            .drop_duplicates()
+            .values
+        ]
+        for session, mle_and_map_file in mle_and_map_files:
+            with open(
+                mle_and_map_file,
+                "rb",
+            ) as f:
+                data = pickle.load(f)
+            full_dfs.extend(
+                [
+                    {
+                        **random_record,
+                        f"map_{prior}": random_record["mle"],
+                        "prior": prior,
+                        "model": "None",
+                        "Model Name": "Null",
+                        "session": session,
+                        "Number Parameters": 0,
+                    }
+                    for random_record in data["RandomPolicy"].to_dict("records")
+                    for prior in data["SoftmaxPolicy"].keys()
                 ]
-                for mle_and_map_file in mle_and_map_files:
-                    with open(
-                        mle_and_map_file,
-                        "rb",
-                    ) as f:
-                        data = pickle.load(f)
-
-                    # remove possibility with map without prior
-                    if "map" in data["SoftmaxPolicy"]:
-                        del data["SoftmaxPolicy"]["map"]
-                    if "map" in data["RandomPolicy"]:
-                        del data["RandomPolicy"]["map"]
-                    if "map" in data["Group"]:
-                        del data["Group"]["map"]
-
-                    random_df = data["RandomPolicy"]
-                    random_df["Model Name"] = "Null"
-                    random_df["Number Parameters"] = 0
-
-                    # make long
-                    map_and_mle_cols = [col for col in list(random_df) if "mle" in col]
-                    cols = [
-                        col for col in list(random_df) if col not in map_and_mle_cols
-                    ]
-                    random_df = random_df.melt(
-                        id_vars=cols, value_vars=map_and_mle_cols, var_name="metric"
+            )
+            for prior, prior_dict in data["SoftmaxPolicy"].items():
+                all_params = max(prior_dict, key=len)
+                for model, model_df in prior_dict.items():
+                    must_contain = set(all_params) - set(
+                        self.cost_details["constant_values"]
                     )
-
-                    if not self.simulated:
-                        random_df["Block"] = random_df["metric"].apply(
-                            lambda metric: metric.split("_")[0]
-                            if metric.split("_")[0]
-                            in self.session_details[session]["trials_per_block"]
-                            else "None"
+                    # in some cases, if we used a larger base cost model we will have
+                    # an entry with param X held constant and not
+                    # (when it always was for this cost function)
+                    if must_contain.issubset(set(model)):
+                        # model is held constant parameters
+                        varied_parameters = set(all_params) - set(model)
+                        number_parameters = len(varied_parameters)
+                        cost_params_in_model = varied_parameters.intersection(
+                            set(self.cost_details["cost_parameter_args"])
                         )
-                        random_df["Number Trials"] = random_df["Block"].apply(
-                            lambda block: self.session_details[session][
-                                "trials_per_block"
-                            ][block]
-                            if block
-                            in self.session_details[session]["trials_per_block"]
-                            else sum(
-                                self.session_details[session][
-                                    "trials_per_block"
-                                ].values()
-                            )
+                        additional_params_in_model = varied_parameters.difference(
+                            set(self.cost_details["cost_parameter_args"])
                         )
-                    else:
-                        random_df["Block"] = "All"
-                        random_df["Number Trials"] = self.number_trials
 
-                    random_df["Prior"] = "None"
-                    random_df["Group"] = False
-
-                    cost_dfs.append(random_df)
-
-                    for softmax_type, group in zip(
-                        ["Group", "SoftmaxPolicy"], [True, False]
-                    ):
-                        for metric in data[softmax_type].keys():
-                            metric_dfs = []
-                            for removed_params in data[softmax_type][metric].keys():
-                                if removed_params in eval(
-                                    self.cost_details[cost_function]["model_name"]
-                                ):
-                                    curr_df = data[softmax_type][metric][
-                                        removed_params
-                                    ].copy(deep=True)
-                                    curr_df["Model Name"] = eval(
-                                        self.cost_details[cost_function]["model_name"]
-                                    )[removed_params]
-                                    curr_df["Number Parameters"] = (
-                                        len(
-                                            self.cost_details[cost_function][
-                                                "constant_values"
-                                            ]
-                                        )
-                                        + 1
-                                        - len(removed_params)
-                                    )
-
-                                    metric_dfs.append(curr_df)
-                            metric_df = pd.concat(metric_dfs).reset_index(drop=True)
-                            metric_df.drop(
-                                [
-                                    col
-                                    for col in list(metric_df)
-                                    if ("map" in col or "mle" in col)
-                                    and (col != metric)
-                                ],
-                                axis=1,
-                                inplace=True,
-                            )
-                            metric_df.rename(columns={metric: "value"}, inplace=True)
-                            metric_df["metric"] = metric
-
-                            if not self.simulated:
-                                metric_df["Block"] = metric_df["metric"].apply(
-                                    lambda metric: metric.split("_")[0]
-                                    if metric.split("_")[0]
-                                    in self.session_details[session]["trials_per_block"]
-                                    else "None"
+                        if len(cost_params_in_model) > 0:
+                            model_name = (
+                                "$"
+                                + ", ".join(
+                                    [
+                                        self.cost_details["latex_mapping"][param]
+                                        for param in sorted(cost_params_in_model)
+                                    ]
                                 )
-                                metric_df["Number Trials"] = metric_df["Block"].apply(
-                                    lambda block: self.session_details[session][
-                                        "trials_per_block"
-                                    ][block]
-                                    if block
-                                    in self.session_details[session]["trials_per_block"]
-                                    else sum(
-                                        self.session_details[session][
-                                            "trials_per_block"
-                                        ].values()
-                                    )
-                                )
-                            else:
-                                metric_df["Block"] = "All"
-                                metric_df["Number Trials"] = self.number_trials
-
-                            metric_df["Prior"] = metric_df["metric"].apply(
-                                lambda metric: metric.split("_")[-1]
-                                if metric.split("_")[-1] not in ["mle", "map"]
-                                else "None"
+                                + "$"
                             )
-                            metric_df["Group"] = group
-                            cost_dfs.append(metric_df)
+                        else:
+                            model_name = "Null (Given Costs)"
 
-            cost_df = pd.concat(cost_dfs)
-            cost_df["cost_function"] = cost_function
-            full_dfs.append(cost_df)
-        full_df = pd.concat(full_dfs).reset_index(drop=True)
+                        if len(additional_params_in_model) > 0:
+                            model_name = (
+                                model_name
+                                + " with $"
+                                + ", ".join(
+                                    [
+                                        self.cost_details["latex_mapping"][param]
+                                        for param in sorted(additional_params_in_model)
+                                    ]
+                                )
+                                + "$"
+                            )
+
+                        self.model_name_mapping[
+                            tuple(param for param in sorted(model))
+                        ] = model_name
+                        full_dfs.extend(
+                            [
+                                {
+                                    **softmax_record,
+                                    "prior": prior,
+                                    "model": model,
+                                    "Model Name": model_name,
+                                    "session": session,
+                                    "Number Parameters": number_parameters,
+                                }
+                                for softmax_record in model_df.to_dict("records")
+                            ]
+                        )
+
+        full_df = pd.DataFrame(full_dfs)
+        # delete old index column, if needed
+        if "index" in full_df:
+            del full_df["index"]
+        # map may not have same prior, delete the one from the grid search
+        if "map" in full_df:
+            del full_df["map"]
+
+        mouselab_data = self.dfs["mouselab-mdp"]
+        # human data does not include terminal actions in num clicks
+        if not self.simulated:
+            mouselab_data["num_clicks"] = (
+                mouselab_data["num_clicks"] + 1
+            )  # add terminal action
+        full_df = self.join_optimization_df_and_processed(
+            optimization_df=full_df,
+            processed_df=mouselab_data[
+                mouselab_data["block"].isin(self.block.split(","))
+            ]
+            .groupby(["pid"], as_index=False)
+            .sum(),
+            variables_of_interest=["num_clicks"],
+        )
 
         full_df["bic"] = full_df.apply(
             lambda row: bic(
-                llf=row["value"],
-                nobs=row["Number Trials"],
+                llf=row[f"map_{self.prior}"],
+                nobs=row["num_clicks"],
                 df_modelwc=row["Number Parameters"],
             ),
             axis=1,
         )
+
         return full_df
 
     def read_experiment_yaml(self):
@@ -637,52 +476,267 @@ class AnalysisObject:
         for key in yaml_dict:
             setattr(self, key, yaml_dict[key])
 
-    def add_individual_variables(
-        self, df: pd.DataFrame, variables_of_interest: List[str] = None
+    @staticmethod
+    def join_optimization_df_and_processed(
+        optimization_df: pd.DataFrame,
+        processed_df: pd.DataFrame,
+        variables_of_interest: List[str] = None,
     ) -> pd.DataFrame:
-        return df.merge(
-            self.individual_variables[["pid", *variables_of_interest]],
-            left_on=[
-                "trace_pid",
-            ],
-            right_on=["pid"],
-            how="left",
+        if all(var in processed_df for var in variables_of_interest):
+            merged_df = optimization_df.merge(
+                processed_df[["pid", *variables_of_interest]],
+                left_on=[
+                    "trace_pid",
+                ],
+                right_on=["pid"],
+                how="left",
+            )
+            # delete pid in case we want to merge additional dataframes
+            # in the future
+            del merged_df["pid"]
+            return merged_df
+        elif all(var in optimization_df for var in variables_of_interest):
+            merged_df = processed_df.merge(
+                optimization_df[["trace_pid", *variables_of_interest]],
+                left_on=[
+                    "pid",
+                ],
+                right_on=["trace_pid"],
+                how="left",
+            )
+            # delete pid in case we want to merge additional dataframes
+            # in the future
+            del merged_df["trace_pid"]
+            return merged_df
+
+    def get_trial_by_trial_likelihoods(
+        self,
+    ) -> pd.DataFrame:
+        trial_by_trial_file = self.irl_path.joinpath(
+            f"analysis/methods/static/data/trial_by_trial/"
+            f"{self.experiment_name}.pkl"
         )
 
-    def add_mouselab_columns(
-        self, df: pd.DataFrame, variables_of_interest: List[str] = None
-    ) -> pd.DataFrame:
-        if variables_of_interest is None:
-            variables_of_interest = ["block"]
+        if trial_by_trial_file.is_file():
+            with open(trial_by_trial_file, "rb") as f:
+                all_trial_by_trial = pickle.load(f)
+        else:
+            self.irl_path.joinpath(
+                "analysis/methods/static/data/trial_by_trial/"
+            ).mkdir(parents=True, exist_ok=True)
 
-        return df.merge(
-            self.mouselab_trials[["pid", *variables_of_interest]],
-            left_on=["trace_pid"],
-            right_on=["pid"],
-            how="left",
+            all_trial_by_trial = {}
+            for excluded_parameters in self.trial_by_trial_models:
+                curr_trial_by_trial = self.compute_trial_by_trial_likelihoods(
+                    excluded_parameters=excluded_parameters,
+                )
+                all_trial_by_trial[excluded_parameters] = curr_trial_by_trial
+
+            with open(trial_by_trial_file, "wb") as f:
+                pickle.dump(all_trial_by_trial, f)
+
+        avg_trial = []
+        for excluded_parameters in self.trial_by_trial_models:
+            participant_lik_trial_dicts = all_trial_by_trial[excluded_parameters]
+            if excluded_parameters == "":
+                model_name = self.model_name_mapping[()]
+            else:
+                model_name = self.model_name_mapping[
+                    tuple(excluded_parameters.split(","))
+                ]
+
+            avg_trial.extend(
+                [
+                    [
+                        pid,
+                        sum([np.exp(action_ll) for action_ll in trial_ll])
+                        / len(trial_ll),
+                        model_name,
+                        excluded_parameters == self.excluded_parameters,
+                        trial_num,
+                    ]
+                    for pid, all_ll in participant_lik_trial_dicts.items()
+                    for trial_num, trial_ll in enumerate(all_ll)
+                ]
+            )
+
+        trial_by_trial_df = pd.DataFrame(
+            avg_trial, columns=["pid", "avg", "Model Name", "best_model", "i_episode"]
         )
+
+        return trial_by_trial_df
+
+    def compute_trial_by_trial_likelihoods(
+        self, excluded_parameters: str = None
+    ) -> Dict[int, List[Any]]:
+        if excluded_parameters is None:
+            excluded_parameters = self.excluded_parameters
+
+        optimization_data = self.query_optimization_data()
+        optimization_data = optimization_data[
+            optimization_data["applied_policy"] == "SoftmaxPolicy"
+        ]
+        if excluded_parameters == "":
+            optimization_data = optimization_data[
+                optimization_data["model"].apply(lambda model: set(model) == set())
+            ].copy(deep=True)
+        else:
+            optimization_data = optimization_data[
+                optimization_data["model"].apply(
+                    lambda model: set(model) == set(excluded_parameters.split(","))
+                )
+            ].copy(deep=True)
+
+        experiment_setting = self.experiment_setting
+
+        with open(
+            self.irl_path.joinpath(
+                f"data/inputs/exp_inputs/structure/"
+                f"{self.experiment_details['structure']}.json"
+            ),
+            "rb",
+        ) as f:
+            structure_data = json.load(f)
+
+        structure_dicts = get_structure_properties(structure_data)
+
+        q_function_generator = (
+            lambda cost_parameters, a, g: get_state_action_values(  # noqa : E731
+                experiment_setting=experiment_setting,
+                bmps_file="Myopic_VOC",
+                bmps_path=self.irl_path.joinpath("cluster/parameters/bmps"),
+                cost_function=eval(self.cost_details["cost_function"]),
+                cost_parameters=cost_parameters,
+                structure=structure_dicts,
+                env_params=self.cost_details["env_params"],
+                kappa=a,
+                gamma=g,
+            )
+        )
+
+        pid_to_best_params = (
+            optimization_data[
+                list(self.cost_details["constant_values"]) + ["trace_pid"]
+            ]
+            .set_index("trace_pid")
+            .to_dict("index")
+        )
+
+        trial_by_trial = {}
+        for pid, config in pid_to_best_params.items():
+            traces = get_trajectories_from_participant_data(
+                self.dfs["mouselab-mdp"][self.dfs["mouselab-mdp"]["pid"] == pid],
+                experiment_setting=experiment_setting,
+                include_last_action=self.cost_details["env_params"][
+                    "include_last_action"
+                ],
+            )
+
+            policy_kwargs = {
+                key: val
+                for key, val in config.items()
+                if key not in self.cost_details["cost_parameter_args"]
+            }
+
+            cost_kwargs = {
+                key: val
+                for key, val in config.items()
+                if key in self.cost_details["cost_parameter_args"]
+            }
+
+            policy_kwargs["noise"] = 0
+            policy_kwargs["preference"] = q_function_generator(
+                cost_kwargs, policy_kwargs["kappa"], policy_kwargs["gamma"]
+            )
+
+            participant = SymmetricMouselabParticipant(
+                experiment_setting=experiment_setting,
+                policy_function=SoftmaxPolicy,
+                additional_mouselab_kwargs={
+                    "mdp_graph_properties": structure_dicts,
+                    **self.cost_details["env_params"],
+                },
+                num_trials=max([len(trace["actions"]) for trace in traces]),
+                cost_function=eval(self.cost_details["cost_function"]),
+                cost_kwargs=cost_kwargs,
+                policy_kwargs={
+                    key: val
+                    for key, val in policy_kwargs.items()
+                    if key not in ["gamma", "kappa"]
+                },
+            )
+
+            for trace in traces:
+                trace["states"] = [
+                    [
+                        adjust_state(
+                            state,
+                            policy_kwargs["gamma"],
+                            participant.mouselab_envs[0].mdp_graph.nodes.data("depth"),
+                            True,
+                        )
+                        for state in trial
+                    ]
+                    for trial in trace["states"]
+                ]
+
+                trial_by_trial[pid] = participant.compute_likelihood(trace)
+
+                sum_trial_by_trial = sum(
+                    [
+                        sum(trial_ll)
+                        for block, trial_ll in zip(trace["block"], trial_by_trial[pid])
+                        if block in self.block.split(",")
+                    ]
+                )
+                assert (
+                    sum_trial_by_trial
+                    - optimization_data[optimization_data["trace_pid"] == pid][
+                        "mle"
+                    ].values[0]
+                ) < 1e-3
+
+        return trial_by_trial
+
+    def load_hdi_ranges(self, excluded_parameters: str = None):
+        if excluded_parameters is None:
+            excluded_parameters = self.excluded_parameters
+
+        if excluded_parameters != "":
+            file_end = "_" + excluded_parameters
+        else:
+            file_end = ""
+
+        hdi_ranges = {}
+        for session, pid in (
+            self.dfs["mouselab-mdp"][["session", "pid"]].drop_duplicates().values
+        ):
+            hdi_file = self.irl_path.joinpath(
+                f"cluster/data/marginal_hdi/{self.cost_function}/{session}/"
+                f"{self.block}_{self.prior}_hdi_{pid}{file_end}.pickle"
+            )
+            with open(
+                hdi_file,
+                "rb",
+            ) as f:
+                hdi_ranges[pid] = pickle.load(f)
+
+        return hdi_ranges
 
     def query_optimization_data(
         self,
-        group: bool = None,
         prior: str = None,
-        block: str = None,
         include_null: bool = None,
+        excluded_parameters: str = None,
     ) -> pd.DataFrame:
-        if group is None:
-            group = self.group
         if prior is None:
             prior = self.prior
-        if block is None:
-            block = self.block
         if include_null is None:
             include_null = self.include_null
 
         subset = self.optimization_data[
             (self.optimization_data["applied_policy"] == "SoftmaxPolicy")
-            & (self.optimization_data["Block"].isin(block))
-            & (self.optimization_data["Prior"] == prior)
-            & (self.optimization_data["Group"] == group)
+            & (self.optimization_data["prior"] == prior)
         ].copy(deep=True)
         if include_null:
             # random policy doesn't have prior
@@ -691,220 +745,20 @@ class AnalysisObject:
                     subset,
                     self.optimization_data[
                         (self.optimization_data["applied_policy"] == "RandomPolicy")
-                        & (self.optimization_data["Block"].isin(block))
-                        & (self.optimization_data["Group"] == group)
+                        & (self.optimization_data["prior"] == prior)
                     ].copy(deep=True),
                 ]
             )
 
-        # check that bic is same for model duplicates by cost functions
-        sum_bic = (
-            subset.groupby(["Model Name", "cost_function"]).sum()["bic"].reset_index()
-        )
-        assert np.all(sum_bic.groupby(["Model Name"]).nunique()["bic"] == 1)
-
-        deduplicated_models = sum_bic.drop_duplicates(["Model Name"])[
-            ["Model Name", "cost_function"]
-        ]
-        deduplicated_models_tuples = list(
-            deduplicated_models.itertuples(index=False, name=None)
-        )
-
-        subset = subset[
-            subset.apply(
-                lambda row: (row["Model Name"], row["cost_function"])
-                in deduplicated_models_tuples,
-                axis=1,
-            )
-        ]
-
-        return subset
-
-    def get_trial_by_trial_likelihoods(
-        self,
-        group: bool = None,
-        prior: str = None,
-        block: str = None,
-        include_null: bool = None,
-    ) -> pd.DataFrame:
-        if group is None:
-            group = self.group
-        if prior is None:
-            prior = self.prior
-        if block is None:
-            block = self.block
-        if include_null is None:
-            include_null = self.include_null
-
-        # only made for when there is one block
-        assert len(block) == 1
-        trial_by_trial_file = self.irl_path.joinpath(
-            f"analysis/{self.experiment_subdirectory}/data/trial_by_trial/"
-            f"{self.experiment_name}_{block[0]}_{prior}.csv"
-        )
-
-        if trial_by_trial_file.is_file():
-            return pd.read_csv(trial_by_trial_file, index_col=0)
+        if excluded_parameters is None:
+            return subset
+        elif excluded_parameters == "":
+            return subset[
+                subset["model"].apply(lambda model: set(model) == set())
+            ].copy(deep=True)
         else:
-            self.irl_path.joinpath(
-                f"analysis/{self.experiment_subdirectory}/data/trial_by_trial/"
-            ).mkdir(parents=True, exist_ok=True)
-            optimization_data = self.query_optimization_data(
-                group=group,
-                prior=prior,
-                block=block,
-                include_null=include_null,
-            )
-            trial_by_trial_likelihoods = self.compute_trial_by_trial_likelihoods(
-                optimization_data
-            )
-            trial_by_trial_likelihoods.to_csv(trial_by_trial_file)
-            return trial_by_trial_likelihoods
-
-    def compute_trial_by_trial_likelihoods(
-        self,
-        optimization_data: pd.DataFrame,
-        q_path: Union[str, Path] = None,
-    ) -> pd.DataFrame:
-        if q_path is None:
-            q_path = self.irl_path.joinpath("cluster/data/q_files")
-
-        # load all q files
-        unique_costs = {}
-        for cost_function in self.cost_details.keys():
-            unique_costs_rows = optimization_data[
-                (optimization_data["cost_function"] == cost_function)
-                & (optimization_data["applied_policy"] == "SoftmaxPolicy")
-            ][self.cost_details[cost_function]["cost_parameter_args"]].drop_duplicates()
-            unique_costs[cost_function] = unique_costs_rows[
-                sorted(list(unique_costs_rows))
-            ].to_dict("records")
-
-        q_files = {
-            get_param_string(cost_kwarg): load_q_file(
-                experiment_setting=self.experiment_setting,
-                cost_function=eval(cost_function),
-                # cost_function=cost_function if eval(cost_function) else None,
-                # cost_function_name=None if eval(cost_function) else,  # TODO
-                cost_params=cost_kwarg,
-                path=q_path,
-            )
-            for cost_function, cost_kwargs in unique_costs.items()
-            for cost_kwarg in cost_kwargs
-        }
-
-        all_values = []
-
-        # softmax policy
-
-        for cost_function in self.cost_details.keys():
-            subset_df = optimization_data[
-                (optimization_data["applied_policy"] == "SoftmaxPolicy")
-                & (optimization_data["cost_function"] == cost_function)
-            ]
-
-            for model in subset_df["Model Name"].unique():
-                subset_subset_df = subset_df[subset_df["Model Name"] == model]
-                unique_settings = (
-                    subset_subset_df[
-                        self.cost_details[cost_function]["cost_parameter_args"]
-                        + ["temp"]
-                    ]
-                    .drop_duplicates()
-                    .to_dict("records")
+            return subset[
+                subset["model"].apply(
+                    lambda model: set(model) == set(excluded_parameters.split(","))
                 )
-                for unique_setting in unique_settings:
-                    curr_pids = subset_subset_df[
-                        subset_subset_df.apply(
-                            lambda row: np.all(
-                                [row[key] == val for key, val in unique_setting.items()]
-                            ),
-                            axis=1,
-                        )
-                    ]["trace_pid"]
-
-                    subset_traces = get_trajectories_from_participant_data(
-                        self.mouselab_trials[
-                            self.mouselab_trials["pid"].isin(curr_pids)
-                        ]
-                    )
-                    cost_kwargs = {
-                        key: val
-                        for key, val in unique_setting.items()
-                        if key
-                        in self.cost_details[cost_function]["cost_parameter_args"]
-                    }
-
-                    participant = SymmetricMouselabParticipant(
-                        experiment_setting=self.experiment_setting,
-                        num_trials=max(
-                            [len(trace["actions"]) for trace in subset_traces]
-                        ),
-                        cost_function=eval(cost_function),
-                        cost_kwargs=cost_kwargs,
-                        policy_function=SoftmaxPolicy,
-                        policy_kwargs={
-                            "preference": q_files[get_param_string(cost_kwargs)],
-                            "temp": unique_setting["temp"],
-                            "noise": 0,
-                        },
-                    )
-
-                    for trace in subset_traces:
-                        trace["likelihood"] = [
-                            np.sum(trial_vals)
-                            for trial_vals in participant.compute_likelihood(trace)
-                        ]
-                    curr_trial_by_trial_df = traces_to_df(subset_traces)
-
-                    curr_values = (
-                        curr_trial_by_trial_df.groupby(["pid", "i_episode"])
-                        .mean()["likelihood"]
-                        .reset_index()
-                    )
-                    for key, val in unique_setting.items():
-                        curr_values[[key]] = val
-                    curr_values["cost_function"] = cost_function
-                    curr_values["applied_policy"] = "SoftmaxPolicy"
-                    curr_values["Model Name"] = model
-
-                    all_values.append(curr_values)
-
-        # random policy
-        traces = get_trajectories_from_participant_data(self.mouselab_trials)
-
-        participant = SymmetricMouselabParticipant(
-            experiment_setting=self.experiment_setting,
-            num_trials=max([len(trace["actions"]) for trace in traces]),
-            policy_function=RandomPolicy,
-            policy_kwargs={},
-        )
-
-        for trace in traces:
-            trace["likelihood"] = [
-                np.sum(trial_vals)
-                for trial_vals in participant.compute_likelihood(trace)
-            ]
-        curr_trial_by_trial_df = traces_to_df(traces)
-
-        curr_values = (
-            curr_trial_by_trial_df.groupby(["pid", "i_episode"])
-            .mean()["likelihood"]
-            .reset_index()
-        )
-        for key, val in unique_setting.items():
-            curr_values[[key]] = val
-        curr_values["cost_function"] = optimization_data[
-            optimization_data["applied_policy"] == "RandomPolicy"
-        ]["cost_function"].unique()[0]
-        curr_values["applied_policy"] = "RandomPolicy"
-        for cost_param in cost_kwargs.keys():
-            curr_values[cost_param] = np.nan
-        curr_values["Model Name"] = optimization_data[
-            optimization_data["applied_policy"] == "RandomPolicy"
-        ]["Model Name"].unique()[0]
-
-        all_values.append(curr_values)
-
-        all_values = pd.concat(all_values)
-        return all_values
+            ].copy(deep=True)

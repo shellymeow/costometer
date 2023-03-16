@@ -7,7 +7,7 @@ import numpy as np
 from mouselab.agents import Agent
 from mouselab.distributions import Categorical
 from mouselab.mouselab import MouselabEnv
-
+from costometer.utils.trace_utils import adjust_state, adjust_ground_truth
 
 class Participant:
     def __init__(
@@ -21,6 +21,8 @@ class Participant:
         trace: Dict[str, List] = None,
         policy_function: Callable = None,
         policy_kwargs: Dict[str, Any] = {},
+        kappa: int = 1,
+        gamma: int = 1,
     ):
         """
         Generic gym participant.
@@ -34,6 +36,8 @@ class Participant:
         :param trace: trajectory for participant (real or simulated)
         :param policy_function: assumed policy of participant (e.g., softmax, optimal, random)
         :param policy_kwargs: keyword arguments for policy function (e.g., {'temperature' : 2})
+        :param kappa
+        :param gamma
         """  # noqa: E501
         # save and check that num trials and ground truths agree
         self._check_for_pipeline_info(num_trials, ground_truths, trial_ids)
@@ -59,6 +63,10 @@ class Participant:
         # (note mutable objects SHOULD NOT be default values which is why we do this)
         self.trace = trace
 
+        self.kappa = kappa
+        self.gamma = gamma
+        self.agent.adjusted = True if kappa == 1 and gamma == 1 else False
+
     def simulate_trajectory(
         self, render: bool = False, pbar: bool = False, force: bool = False
     ):
@@ -70,6 +78,22 @@ class Participant:
         :param force: whether to force save
         :return: Nothing, saves actions and rewards to object
         """
+        if not self.agent.adjusted:
+            for env in self.agent.env:
+                env._state = adjust_state(
+                    env._state,
+                    self.gamma,
+                    env.mdp_graph.nodes.data("depth"),
+                    len(env._state) > env.term_action,
+                )
+                env.ground_truth = adjust_ground_truth(
+                    env.ground_truth,
+                    self.gamma,
+                    env.mdp_graph.nodes.data("depth")
+                )
+                env.power_utility = self.kappa
+            self.agent.adjusted = True
+
         trace = self.agent.run_many(pbar=pbar, render=render)
 
         trace["ground_truth"] = self.ground_truths
@@ -181,6 +205,8 @@ class SymmetricMouselabParticipant(Participant):
         trace: Dict[str, List] = None,
         policy_function: Callable = None,
         policy_kwargs: Dict[str, Any] = {},
+        kappa : int = 1,
+        gamma : int = 1,
     ):
         """
         Participant class specifically for symmetric versions of the Mouselab MDP environment.
@@ -196,6 +222,8 @@ class SymmetricMouselabParticipant(Participant):
         :param trace: See parent class
         :param policy_function: See parent class
         :param policy_kwargs: See parent class
+        :param kappa
+        :param gamma
         """  # noqa: E501
         # if cost function not None, combine with kwargs for envs
         if cost_function:
@@ -239,4 +267,6 @@ class SymmetricMouselabParticipant(Participant):
             trace=trace,
             policy_function=policy_function,
             policy_kwargs=policy_kwargs,
+            kappa=kappa,
+            gamma=gamma,
         )

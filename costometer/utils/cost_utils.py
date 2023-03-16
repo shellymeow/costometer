@@ -1,16 +1,21 @@
 """These utilities are related to cost: parameter strings, combinations and q-values"""
+import os
 import time
 from itertools import product
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any, Callable, Dict, Union
 
 import blosc
 import dill as pickle
 import numpy as np
 from mouselab.cost_functions import linear_depth
 from mouselab.exact_utils import timed_solve_env
-from mouselab.graph_utils import annotate_mdp_graph
+from mouselab.metacontroller.mouselab_env import MetaControllerMouselab
+from mouselab.metacontroller.vanilla_BMPS import load_feature_file
 from mouselab.mouselab import MouselabEnv
 from numpy.random import default_rng
+
+from costometer.utils.trace_utils import adjust_ground_truth, adjust_state
 
 
 def save_q_values_for_cost(
@@ -54,13 +59,11 @@ def save_q_values_for_cost(
         solve_kwargs = {}
 
     categorical_gym_env = MouselabEnv.new_symmetric_registered(
-        experiment_setting, cost=cost_function(**cost_params), **env_params
+        experiment_setting,
+        cost=cost_function(**cost_params),
+        mdp_graph_properties=structure,
+        **env_params,
     )
-    # if info on structure provided, add to mdp graph (probably needed in cost)
-    if structure:
-        categorical_gym_env.mdp_graph = annotate_mdp_graph(
-            categorical_gym_env.mdp_graph, structure
-        )
 
     # solve environment
     _, _, _, info = timed_solve_env(
@@ -114,6 +117,143 @@ def get_param_string(cost_params):
     return parameter_string
 
 
+def get_cost_params_from_string(parameter_string, cost_parameter_args) -> Dict:
+    return {
+        key: float(param)
+        for key, param in zip(sorted(cost_parameter_args), parameter_string.split("_"))
+    }
+
+
+def get_matching_q_files(
+    experiment_setting,
+    cost_function: str = None,
+    cost_function_name: str = None,
+    cost_params: Dict[Any, Any] = None,
+    path=None,
+):
+    parameter_string = get_param_string(cost_params=cost_params)
+
+    # don't want "**" in the glob
+    if parameter_string[-1] == "*":
+        parameter_string = parameter_string[:-1]
+
+    if cost_function_name is None and callable(cost_function):
+        cost_function_name = cost_function.__name__
+    elif cost_function_name is None:
+        cost_function_name = cost_function
+
+    files = list(
+        path.glob(
+            f"{experiment_setting}/{cost_function_name}/"
+            f"*_{experiment_setting}_{parameter_string}*dat"
+        )  # noqa: E501
+    )
+
+    return files
+
+
+def get_state_action_values(
+    experiment_setting: str,
+    bmps_file: str,
+    cost_parameters: Dict[str, float],
+    cost_function: Callable,
+    cost_function_name: str = None,
+    structure: Dict[Any, Any] = None,
+    path: Union[str, bytes, os.PathLike] = None,
+    bmps_path: Union[str, bytes, os.PathLike] = None,
+    env_params: Dict[Any, Any] = None,
+    kappa: float = 1,
+    gamma: float = 1,
+) -> Callable:
+    """
+    Gets BMPS weights for different cost functions
+
+    :param experiment_setting: which experiment setting (e.g. high increasing)
+    :param cost_parameters: a dictionary of inputs for the cost function
+    :param cost_function: cost function to use
+    :param cost_function_name:
+    :param structure: where nodes are
+    :param path:
+    :param env_params
+    :param kappa
+    :param gamma
+    :return: info dictionary which contains q_dictionary, \
+    function additionally saves this dictionary into data/q_files
+    """
+    W = np.asarray([1, 1, 1])
+
+    if env_params is None:
+        env_params = {}
+
+    if bmps_path is None:
+        bmps_path = Path(__file__).parents[1].joinpath("parameters/bmps/")
+
+    env = MouselabEnv.new_symmetric_registered(
+        experiment_setting,
+        cost=cost_function(**cost_parameters),
+        mdp_graph_properties=structure,
+        **env_params,
+    )
+
+    (_, features, _, _,) = load_feature_file(
+        bmps_file, path=bmps_path
+    )
+
+    env = MetaControllerMouselab(
+        env.tree,
+        env.init,
+        term_belief=False,
+        features=features,
+        seed=91,
+        cost=cost_function(**cost_parameters),
+        mdp_graph_properties=structure,
+        power_utility=kappa,
+        **env_params,
+    )
+
+    env.ground_truth = adjust_ground_truth(
+        env.ground_truth, gamma, env.mdp_graph.nodes.data("depth")
+    )
+    env._state = adjust_state(env._state, gamma, env.mdp_graph.nodes.data("depth"))
+
+    Q = lambda state, action: np.dot(
+        env.action_features(state=state, action=action), W
+    )  # noqa : E731
+
+    info = {"q_dictionary": Q}
+    # saves res dict
+    if path is not None:
+        parameter_string = get_param_string(cost_parameters)
+        if kappa == 1:
+            kappa_string = ""
+        else:
+            kappa_string = f"_{kappa:.2f}"
+
+        if gamma == 1:
+            gamma_string = ""
+        else:
+            gamma_string = f"{gamma:.3f}"
+
+        path.joinpath(
+            f"preferences/{experiment_setting}{gamma_string}{kappa_string}/"
+            f"{cost_function_name}/"
+        ).mkdir(parents=True, exist_ok=True)
+        filename = path.joinpath(
+            f"preferences/{experiment_setting}{gamma_string}{kappa_string}/"
+            f"{cost_function_name}/"
+            f"BMPS_{experiment_setting}{gamma_string}{kappa_string}"
+            f"_{parameter_string}.dat"  # noqa: E501
+        )
+
+        pickled_data = pickle.dumps(info)
+        compressed_pickle = blosc.compress(pickled_data)
+
+        with open(filename, "wb") as f:
+            f.write(compressed_pickle)
+
+    return Q
+
+
 def load_q_file(
     experiment_setting,
     cost_function: str = None,
@@ -130,16 +270,12 @@ def load_q_file(
     :param path: path where data is
     :return: dictionary containing q values
     """
-    parameter_string = get_param_string(cost_params=cost_params)
-
-    if cost_function_name is None:
-        cost_function_name = cost_function.__name__
-
-    files = list(
-        path.glob(
-            f"{experiment_setting}/{cost_function_name}/"
-            f"Q_{experiment_setting}_{parameter_string}_*.dat"
-        )  # noqa: E501
+    files = get_matching_q_files(
+        experiment_setting=experiment_setting,
+        cost_function=cost_function,
+        cost_function_name=cost_function_name,
+        cost_params=cost_params,
+        path=path,
     )
 
     if len(files) > 1:
