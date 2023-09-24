@@ -1,0 +1,1026 @@
+[
+	{
+		"success": true,
+		"trial_type": "fullscreen",
+		"trial_index": 0,
+		"time_elapsed": 2237,
+		"internal_node_id": "0.0-0.0"
+	},
+	{
+		"view_history": "[{\"page_index\":0,\"viewing_time\":1807}]",
+		"rt": 1807,
+		"trial_type": "instructions",
+		"trial_index": 1,
+		"time_elapsed": 4073,
+		"internal_node_id": "0.0-2.0-0.0"
+	},
+	{
+		"revealed_states": [],
+		"num_clicks_accrued": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"stateRewards": [
+			"",
+			2,
+			-4,
+			-48,
+			24,
+			2,
+			4,
+			-48,
+			48,
+			-4,
+			4,
+			48,
+			-48
+		],
+		"trial_id": 5297217084176218000,
+		"block": "training",
+		"trialIndex": 0,
+		"score": -47,
+		"simulationMode": [
+			null,
+			null,
+			null
+		],
+		"rewards": [
+			2,
+			4,
+			-48
+		],
+		"path": [
+			"0",
+			"0",
+			"5",
+			"6",
+			"7"
+		],
+		"rt": [
+			4875,
+			347,
+			192
+		],
+		"actions": [
+			"right",
+			"right",
+			"up"
+		],
+		"actionTimes": [
+			6356,
+			7220,
+			7928
+		],
+		"queries": {
+			"click": {
+				"state": {
+					"target": [
+						"9",
+						"1",
+						"5",
+						"2",
+						"6"
+					],
+					"time": [
+						2040,
+						2877,
+						3280,
+						3882,
+						5072
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseover": {
+				"state": {
+					"target": [
+						"9",
+						"1",
+						"5",
+						"2",
+						"6"
+					],
+					"time": [
+						1854,
+						2737,
+						3219,
+						3819,
+						4924
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseout": {
+				"state": {
+					"target": [
+						"0",
+						"9",
+						"1",
+						"5",
+						"1",
+						"2",
+						"6"
+					],
+					"time": [
+						1488,
+						2238,
+						3139,
+						3586,
+						3704,
+						4152,
+						5501
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			}
+		},
+		"displayed_time": "10.50",
+		"trialTime": 10855,
+		"trial_type": "mouselab-mdp",
+		"trial_index": 2,
+		"time_elapsed": 15068,
+		"internal_node_id": "0.0-2.0-1.0-0.0"
+	},
+	{
+		"revealed_states": [],
+		"num_clicks_accrued": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"stateRewards": [
+			"",
+			2,
+			8,
+			-48,
+			-48,
+			-4,
+			8,
+			24,
+			24,
+			-2,
+			8,
+			-24,
+			48
+		],
+		"trial_id": -3235984444881886700,
+		"block": "training",
+		"trialIndex": 1,
+		"score": 48,
+		"simulationMode": [
+			null,
+			null,
+			null
+		],
+		"rewards": [
+			-2,
+			8,
+			48
+		],
+		"path": [
+			"0",
+			"0",
+			"9",
+			"10",
+			"12"
+		],
+		"rt": [
+			4047,
+			138,
+			362
+		],
+		"actions": [
+			"left",
+			"left",
+			"down"
+		],
+		"actionTimes": [
+			5876,
+			6526,
+			7400
+		],
+		"queries": {
+			"click": {
+				"state": {
+					"target": [
+						"12",
+						"11",
+						"4",
+						"3",
+						"7",
+						"8"
+					],
+					"time": [
+						2427,
+						3085,
+						3520,
+						4366,
+						4737,
+						5210
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseover": {
+				"state": {
+					"target": [
+						"12",
+						"10",
+						"11",
+						"4",
+						"2",
+						"3",
+						"3",
+						"7",
+						"6",
+						"8"
+					],
+					"time": [
+						2298,
+						2701,
+						2746,
+						3386,
+						3786,
+						3806,
+						4202,
+						4569,
+						5003,
+						5053
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseout": {
+				"state": {
+					"target": [
+						"8",
+						"0",
+						"12",
+						"10",
+						"11",
+						"4",
+						"2",
+						"3",
+						"3",
+						"7",
+						"6"
+					],
+					"time": [
+						429,
+						1868,
+						2678,
+						2722,
+						3353,
+						3770,
+						3804,
+						3885,
+						4536,
+						4985,
+						5036
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			}
+		},
+		"displayed_time": "10.84",
+		"trialTime": 11125,
+		"trial_type": "mouselab-mdp",
+		"trial_index": 3,
+		"time_elapsed": 26494,
+		"internal_node_id": "0.0-2.0-1.0-1.0"
+	},
+	{
+		"revealed_states": [],
+		"num_clicks_accrued": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"stateRewards": [
+			"",
+			2,
+			8,
+			48,
+			48,
+			-4,
+			-8,
+			24,
+			48,
+			4,
+			4,
+			48,
+			24
+		],
+		"trial_id": 461011171885628200,
+		"block": "training",
+		"trialIndex": 2,
+		"score": 29,
+		"simulationMode": [
+			null,
+			null,
+			null
+		],
+		"rewards": [
+			4,
+			4,
+			24
+		],
+		"path": [
+			"0",
+			"0",
+			"9",
+			"10",
+			"12"
+		],
+		"rt": [
+			1844,
+			330,
+			643
+		],
+		"actions": [
+			"left",
+			"left",
+			"down"
+		],
+		"actionTimes": [
+			2845,
+			3700,
+			4871
+		],
+		"queries": {
+			"click": {
+				"state": {
+					"target": [
+						"12",
+						"10",
+						"9"
+					],
+					"time": [
+						1497,
+						1874,
+						2220
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseover": {
+				"state": {
+					"target": [
+						"12",
+						"10",
+						"9"
+					],
+					"time": [
+						1346,
+						1813,
+						2147
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseout": {
+				"state": {
+					"target": [
+						"8",
+						"0",
+						"12",
+						"10"
+					],
+					"time": [
+						478,
+						1212,
+						1777,
+						2112
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			}
+		},
+		"displayed_time": "11.01",
+		"trialTime": 11434,
+		"trial_type": "mouselab-mdp",
+		"trial_index": 4,
+		"time_elapsed": 38021,
+		"internal_node_id": "0.0-2.0-1.0-2.0"
+	},
+	{
+		"revealed_states": [],
+		"num_clicks_accrued": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"stateRewards": [
+			"",
+			-2,
+			8,
+			-24,
+			48,
+			2,
+			4,
+			-48,
+			24,
+			4,
+			-4,
+			48,
+			48
+		],
+		"trial_id": 3761354316659214000,
+		"block": "training",
+		"trialIndex": 3,
+		"score": 49,
+		"simulationMode": [
+			null,
+			null,
+			null
+		],
+		"rewards": [
+			-2,
+			8,
+			48
+		],
+		"path": [
+			"0",
+			"0",
+			"1",
+			"2",
+			"4"
+		],
+		"rt": [
+			7154,
+			142,
+			100
+		],
+		"actions": [
+			"up",
+			"up",
+			"left"
+		],
+		"actionTimes": [
+			7938,
+			8602,
+			9241
+		],
+		"queries": {
+			"click": {
+				"state": {
+					"target": [
+						"8",
+						"6",
+						"5",
+						"3",
+						"4"
+					],
+					"time": [
+						3818,
+						4354,
+						4795,
+						6566,
+						7065
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseover": {
+				"state": {
+					"target": [
+						"0",
+						"8",
+						"8",
+						"6",
+						"5",
+						"2",
+						"3",
+						"2",
+						"4"
+					],
+					"time": [
+						1045,
+						1077,
+						3708,
+						4257,
+						4690,
+						6241,
+						6440,
+						6872,
+						6956
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseout": {
+				"state": {
+					"target": [
+						"9",
+						"0",
+						"8",
+						"8",
+						"6",
+						"5",
+						"5",
+						"2",
+						"3",
+						"2",
+						"4"
+					],
+					"time": [
+						460,
+						1060,
+						1093,
+						4212,
+						4657,
+						5340,
+						6075,
+						6391,
+						6840,
+						6923,
+						7374
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			}
+		},
+		"displayed_time": "9.77",
+		"trialTime": 11368,
+		"trial_type": "mouselab-mdp",
+		"trial_index": 5,
+		"time_elapsed": 49480,
+		"internal_node_id": "0.0-2.0-1.0-3.0"
+	},
+	{
+		"revealed_states": [],
+		"num_clicks_accrued": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"stateRewards": [
+			"",
+			-2,
+			4,
+			-24,
+			-24,
+			-4,
+			-8,
+			48,
+			-24,
+			4,
+			-8,
+			-24,
+			24
+		],
+		"trial_id": -51234349377613830,
+		"block": "test",
+		"trialIndex": 4,
+		"score": 11,
+		"simulationMode": [
+			null,
+			null,
+			null
+		],
+		"rewards": [
+			4,
+			-8,
+			24
+		],
+		"path": [
+			"0",
+			"0",
+			"9",
+			"10",
+			"12"
+		],
+		"rt": [
+			7024,
+			157,
+			191
+		],
+		"actions": [
+			"left",
+			"left",
+			"down"
+		],
+		"actionTimes": [
+			8034,
+			8723,
+			9438
+		],
+		"queries": {
+			"click": {
+				"state": {
+					"target": [
+						"12",
+						"11",
+						"4",
+						"3",
+						"7",
+						"8",
+						"5",
+						"1",
+						"9"
+					],
+					"time": [
+						1582,
+						2052,
+						2529,
+						2982,
+						3445,
+						4004,
+						5304,
+						6579,
+						7028
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseover": {
+				"state": {
+					"target": [
+						"9",
+						"12",
+						"10",
+						"11",
+						"4",
+						"2",
+						"3",
+						"7",
+						"6",
+						"8",
+						"5",
+						"1",
+						"9"
+					],
+					"time": [
+						1054,
+						1457,
+						1825,
+						1911,
+						2377,
+						2800,
+						2834,
+						3332,
+						3715,
+						3765,
+						5097,
+						6447,
+						6910
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseout": {
+				"state": {
+					"target": [
+						"11",
+						"0",
+						"9",
+						"12",
+						"10",
+						"11",
+						"4",
+						"2",
+						"3",
+						"7",
+						"6",
+						"8",
+						"5",
+						"1"
+					],
+					"time": [
+						473,
+						1044,
+						1106,
+						1791,
+						1875,
+						2344,
+						2781,
+						2815,
+						3264,
+						3700,
+						3732,
+						4575,
+						6296,
+						6864
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			}
+		},
+		"displayed_time": "9.96",
+		"trialTime": 10433,
+		"trial_type": "mouselab-mdp",
+		"trial_index": 6,
+		"time_elapsed": 60162,
+		"internal_node_id": "0.0-2.0-2.0-0.0"
+	},
+	{
+		"revealed_states": [],
+		"num_clicks_accrued": [
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		],
+		"stateRewards": [
+			"",
+			4,
+			8,
+			-48,
+			-48,
+			-4,
+			8,
+			-48,
+			-24,
+			4,
+			4,
+			24,
+			-24
+		],
+		"trial_id": 5673770806327289000,
+		"block": "test",
+		"trialIndex": 5,
+		"score": -45,
+		"simulationMode": [
+			null,
+			null,
+			null
+		],
+		"rewards": [
+			4,
+			8,
+			-48
+		],
+		"path": [
+			"0",
+			"0",
+			"1",
+			"2",
+			"3"
+		],
+		"rt": [
+			5785,
+			81,
+			148
+		],
+		"actions": [
+			"up",
+			"up",
+			"right"
+		],
+		"actionTimes": [
+			6794,
+			7407,
+			8094
+		],
+		"queries": {
+			"click": {
+				"state": {
+					"target": [
+						"12",
+						"10",
+						"9",
+						"4",
+						"2",
+						"1",
+						"8",
+						"6",
+						"5"
+					],
+					"time": [
+						1667,
+						2032,
+						2581,
+						3153,
+						3532,
+						3927,
+						5551,
+						5985,
+						6291
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseover": {
+				"state": {
+					"target": [
+						"9",
+						"12",
+						"10",
+						"9",
+						"4",
+						"2",
+						"1",
+						"5",
+						"8",
+						"6",
+						"8",
+						"6",
+						"5"
+					],
+					"time": [
+						1250,
+						1535,
+						1893,
+						2266,
+						2947,
+						3439,
+						3793,
+						4254,
+						4987,
+						5106,
+						5438,
+						5885,
+						6176
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			},
+			"mouseout": {
+				"state": {
+					"target": [
+						"9",
+						"9",
+						"12",
+						"10",
+						"9",
+						"4",
+						"2",
+						"1",
+						"5",
+						"8",
+						"6",
+						"8",
+						"6"
+					],
+					"time": [
+						685,
+						1267,
+						1843,
+						2232,
+						2814,
+						3375,
+						3773,
+						4207,
+						4528,
+						5020,
+						5386,
+						5786,
+						6138
+					]
+				},
+				"edge": {
+					"target": [],
+					"time": []
+				}
+			}
+		},
+		"displayed_time": "9.02",
+		"trialTime": 9864,
+		"trial_type": "mouselab-mdp",
+		"trial_index": 7,
+		"time_elapsed": 70151,
+		"internal_node_id": "0.0-2.0-2.0-1.0"
+	},
+	{
+		"rt": 7516,
+		"responses": "{\"Q0\":\"$-4 to $4\",\"Q1\":\"$-8 to $8\",\"Q2\":\"$-48 to $48\",\"Q3\":\"No, the cost is always $1.00.\",\"Q4\":\"Neither motivated nor unmotivated\"}",
+		"trial_type": "survey-multi-choice",
+		"trial_index": 8,
+		"time_elapsed": 77696,
+		"internal_node_id": "0.0-2.0-3.0"
+	},
+	{
+		"rt": 7766,
+		"responses": "{\"gender\":\"female\",\"age\":\"100\",\"colorblind\":\"2\",\"effort\":\"3\"}",
+		"trial_type": "survey-html-form",
+		"trial_index": 9,
+		"time_elapsed": 85467,
+		"internal_node_id": "0.0-2.0-4.0"
+	},
+	{
+		"rt": 2440,
+		"responses": "{\"Q0\":\"\",\"Q1\":\"\",\"Q2\":\"\"}",
+		"trial_type": "survey-text",
+		"trial_index": 10,
+		"time_elapsed": 87914,
+		"internal_node_id": "0.0-2.0-5.0"
+	},
+	{
+		"success": true,
+		"trial_type": "fullscreen",
+		"trial_index": 11,
+		"time_elapsed": 88916,
+		"internal_node_id": "0.0-3.0"
+	}
+]

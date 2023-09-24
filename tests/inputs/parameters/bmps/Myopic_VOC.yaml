@@ -1,0 +1,16 @@
+features:
+  myopic_voc:
+    'type': 'continuous'
+    'domain': (0,1)
+  cost:
+    'type': 'continuous'
+    'domain': (1,9)
+  expected_term_reward:
+    'type': 'continuous'
+    'domain': (0,1)
+constraints:
+  myopic_voc_leq:
+    constraint : 'x[:,0] - 1' # myopic_voc <= 1
+  cost_leq:
+    constraint: 'x[:,1] - 1' #  cost <= 1
+secondary_variables: null
