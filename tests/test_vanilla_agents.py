@@ -4,7 +4,7 @@ from pathlib import Path
 import dill as pickle
 import numpy as np
 import pytest
-from inputs.create_test_inputs import create_trajectory, get_q_function
+from .inputs.create_test_inputs import create_trajectory, get_q_function
 from mouselab.envs.registry import register
 from mouselab.envs.reward_settings import high_decreasing_reward, high_increasing_reward
 from mouselab.policies import SoftmaxPolicy

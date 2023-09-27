@@ -1,5 +1,6 @@
 from pathlib import Path
 from shutil import rmtree
+from .fixtures import load_structure_dicts
 
 import pytest
 from mouselab.cost_functions import linear_depth
@@ -39,7 +40,7 @@ save_q_test_data = [
 @pytest.fixture(params=save_q_test_data)
 def save_q_test_cases(request):
     # setup
-    output_path = Path(__file__).parents[0].joinpath("./outputs")
+    output_path = Path(__file__).parents[0].joinpath("outputs")
     rmtree(output_path, ignore_errors=True)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -51,16 +52,18 @@ def save_q_test_cases(request):
 
 
 def test_save_q_values_for_cost(save_q_test_cases):
+    structure_dicts = load_structure_dicts("small_structure")
+
     experiment_setting, path, cost_kwargs = save_q_test_cases
     beginning_file_num = len(
         list(
-            path.glob(f"{experiment_setting}/{cost_kwargs['cost_function'].__name__}/*")
+            (path / experiment_setting / cost_kwargs['cost_function'].__name__).glob("*")
         )
     )
-    save_q_values_for_cost(experiment_setting, path=path, **cost_kwargs)
+    save_q_values_for_cost(experiment_setting, path=path, structure=structure_dicts, **cost_kwargs)
     ending_file_num = len(
         list(
-            path.glob(f"{experiment_setting}/{cost_kwargs['cost_function'].__name__}/*")
+            (path / experiment_setting / cost_kwargs['cost_function'].__name__).glob("*")
         )
     )
     # just check file is being saved

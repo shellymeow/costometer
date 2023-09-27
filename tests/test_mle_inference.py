@@ -1,7 +1,7 @@
 import json
 from copy import deepcopy
 from pathlib import Path
-
+from .fixtures import load_structure_dicts
 import pandas as pd
 import pytest
 from mouselab.cost_functions import linear_depth
@@ -87,17 +87,7 @@ def mle_test_cases(request, inference_cost_parameters=None):
         reward_dictionary=request.param["env"]["reward_dictionary"],
     )
 
-    # load structure file
-    structure_file = (
-        Path(__file__).parents[0] / "inputs" / "structure" / "small_structure.json"
-    )
-    with open(
-        structure_file,
-        "rb",
-    ) as f:
-        structure_data = json.load(f)
-
-    structure_dicts = get_structure_properties(structure_data)
+    structure_dicts = load_structure_dicts("small_structure")
     env_params = {"include_last_action": True, "last_action_info": "distance"}
     additional_mouselab_kwargs = {
         "mdp_graph_properties": structure_dicts,

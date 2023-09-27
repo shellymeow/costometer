@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 from shutil import rmtree
-
+from .fixtures import load_structure_dicts
 from mouselab.cost_functions import linear_depth
 from mouselab.envs.registry import register
 from mouselab.envs.reward_settings import high_decreasing_reward, high_increasing_reward
@@ -49,8 +49,10 @@ test_save_q = [
 class TestUtils(unittest.TestCase):
     @parameterized.expand(test_save_q)
     def test_save_q_values_for_cost(self, experiment_setting, path, cost_kwargs):
+        structure_dicts = load_structure_dicts("small_structure")
+
         beginning_file_num = len(list(path.glob("*")))
-        save_q_values_for_cost(experiment_setting, path=path, **cost_kwargs)
+        save_q_values_for_cost(experiment_setting, path=path, structure=structure_dicts, **cost_kwargs)
         ending_file_num = len(list(path.glob("*")))
         # just check file is being saved
         self.assertEqual(ending_file_num - beginning_file_num, 1)
