@@ -579,7 +579,11 @@ class AnalysisObject:
 
     def get_trial_by_trial_likelihoods(
         self,
+            fixed_model : bool = True
     ) -> pd.DataFrame:
+        file_suffix = ""
+        if not fixed_model:
+            file_suffix = "_random"
         trial_by_trial_file = (
             self.irl_path
             / "analysis"
@@ -587,7 +591,8 @@ class AnalysisObject:
             / "static"
             / "data"
             / "trial_by_trial"
-            / f"{self.experiment_name}.pkl"
+            / f"{self.experiment_name}"
+              f"{file_suffix}.pkl"
         )
 
         if trial_by_trial_file.is_file():
@@ -603,6 +608,7 @@ class AnalysisObject:
             ) in self.analysis_details.trial_by_trial_models_mapping.items():
                 curr_trial_by_trial = self.compute_trial_by_trial_likelihoods(
                     excluded_parameters=excluded_parameters,
+                    fixed_model=fixed_model
                 )
                 all_trial_by_trial[excluded_parameter_string] = curr_trial_by_trial
 
@@ -642,15 +648,57 @@ class AnalysisObject:
 
         return trial_by_trial_df
 
+    def get_random_effects_optimization_data(self):
+        pivoted_df = pd.read_csv(
+            self.irl_path.joinpath(f"data/bms/inputs/{self.experiment_name}.csv")
+        )
+        bms_df = pd.read_csv(
+            self.irl_path.joinpath(f"data/bms/outputs/{self.experiment_name}.csv"),
+            header=None,
+            index_col=0
+        )
+
+        pivoted_df = pivoted_df.set_index("trace_pid")
+        bms_df.columns = pivoted_df.columns
+
+        results = []
+        for row_idx, row in bms_df.iterrows():
+            print([row_idx, np.max(row), bms_df.columns[np.argmax(row)]])
+            results.append([row_idx, np.max(row), bms_df.columns[np.argmax(row)]])
+
+        random_effect_optimization_data = pd.DataFrame(results, columns=["pid", "prob_model", "model_name"])
+
+        optimization_data = self.query_optimization_data()
+        optimization_data = optimization_data[
+            optimization_data.apply(
+                lambda row: set(self.excluded_parameters.split(",")).issubset(
+                    row["model"]
+                )
+                            or (row["Model Name"] == "Null"),
+                axis=1,
+            )
+        ]
+
+        random_effect_optimization_data = random_effect_optimization_data.merge(
+            optimization_data,
+            left_on=["pid", "model_name"],
+            right_on=["trace_pid", "Model Name"],
+        ).set_index("pid")
+        return random_effect_optimization_data
+
     def compute_trial_by_trial_likelihoods(
-        self, excluded_parameters: str = None
+        self, excluded_parameters: str = None, fixed_model : bool = True
     ) -> Dict[int, List[Any]]:
         if excluded_parameters is None:
             excluded_parameters = self.excluded_parameters
 
-        optimization_data = self.query_optimization_data(
-            excluded_parameters=excluded_parameters
-        )
+        if fixed_model:
+            optimization_data = self.query_optimization_data(
+                excluded_parameters=excluded_parameters
+            )
+        else:
+            optimization_data = self.get_random_effects_optimization_data()
+
         experiment_setting = self.experiment_setting
 
         structure_file = (
