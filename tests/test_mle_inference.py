@@ -1,7 +1,7 @@
 import json
 from copy import deepcopy
 from pathlib import Path
-from .fixtures import load_structure_dicts
+
 import pandas as pd
 import pytest
 from mouselab.cost_functions import linear_depth
@@ -14,6 +14,8 @@ from mouselab.policies import RandomPolicy, SoftmaxPolicy
 from costometer.agents.vanilla import SymmetricMouselabParticipant
 from costometer.inference.grid import GridInference
 from costometer.utils import get_state_action_values
+
+from .fixtures import load_structure_dicts
 
 mle_test_data = [
     {

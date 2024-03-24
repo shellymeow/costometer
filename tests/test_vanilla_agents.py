@@ -4,7 +4,6 @@ from pathlib import Path
 import dill as pickle
 import numpy as np
 import pytest
-from .inputs.create_test_inputs import create_trajectory, get_q_function
 from mouselab.envs.registry import register
 from mouselab.envs.reward_settings import high_decreasing_reward, high_increasing_reward
 from mouselab.policies import SoftmaxPolicy
@@ -16,6 +15,8 @@ from costometer.envs.discrete import (
 )
 from costometer.envs.discrete_costs import distance_bonus
 from costometer.planning_algorithms.vi import flatten_q, value_iteration
+
+from .inputs.create_test_inputs import create_trajectory, get_q_function
 
 # HACK for compatibility with gym=0.21.0 and numpy>=1.20 (np.bool deprecated)
 np.bool = bool

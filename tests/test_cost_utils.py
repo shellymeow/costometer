@@ -1,6 +1,5 @@
 from pathlib import Path
 from shutil import rmtree
-from .fixtures import load_structure_dicts
 
 import pytest
 from mouselab.cost_functions import linear_depth
@@ -8,6 +7,8 @@ from mouselab.envs.registry import register
 from mouselab.envs.reward_settings import high_decreasing_reward, high_increasing_reward
 
 from costometer.utils import save_q_values_for_cost
+
+from .fixtures import load_structure_dicts
 
 save_q_test_data = [
     {
@@ -57,13 +58,19 @@ def test_save_q_values_for_cost(save_q_test_cases):
     experiment_setting, path, cost_kwargs = save_q_test_cases
     beginning_file_num = len(
         list(
-            (path / experiment_setting / cost_kwargs['cost_function'].__name__).glob("*")
+            (path / experiment_setting / cost_kwargs["cost_function"].__name__).glob(
+                "*"
+            )
         )
     )
-    save_q_values_for_cost(experiment_setting, path=path, structure=structure_dicts, **cost_kwargs)
+    save_q_values_for_cost(
+        experiment_setting, path=path, structure=structure_dicts, **cost_kwargs
+    )
     ending_file_num = len(
         list(
-            (path / experiment_setting / cost_kwargs['cost_function'].__name__).glob("*")
+            (path / experiment_setting / cost_kwargs["cost_function"].__name__).glob(
+                "*"
+            )
         )
     )
     # just check file is being saved
