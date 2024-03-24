@@ -1,4 +1,5 @@
 """These utilities are related to cost: parameter strings, combinations and q-values."""
+import logging
 import os
 import time
 from itertools import product
@@ -183,9 +184,6 @@ def get_state_action_values(
     """
     W = np.asarray([1, 1, 1])  # noqa : N806
 
-    if env_params is None:
-        env_params = {}
-
     if bmps_path is None:
         bmps_path = Path(__file__).parents[1] / "parameters" / "bmps"
 
@@ -193,7 +191,7 @@ def get_state_action_values(
         experiment_setting,
         cost=cost_function(**cost_parameters),
         mdp_graph_properties=structure,
-        **env_params,
+        **dict(env_params),
     )
 
     (
@@ -212,7 +210,7 @@ def get_state_action_values(
         cost=cost_function(**cost_parameters),
         mdp_graph_properties=structure,
         power_utility=kappa,
-        **env_params,
+        **dict(env_params),
     )
 
     env.ground_truth = adjust_ground_truth(
@@ -284,7 +282,8 @@ def load_q_file(
     )
 
     if len(files) > 1:
-        print(f"Number of files: {len(files)}\n Choosing latest file.")
+        # TODO: info or debug??
+        logging.info(f"Number of files: {len(files)}\n Choosing latest file.")
     # always a list, so why not sort
     filename = sorted(files, reverse=True)[0]
     with open(filename, "rb") as f:
