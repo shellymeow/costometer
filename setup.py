@@ -29,6 +29,7 @@ setup(
         "mouselab @ git+https://github.com/RationalityEnhancementGroup/mouselab-mdp-tools.git@dev#egg=mouselab",  # noqa
         "numpy",
         "pandas",
+        "pydantic-yaml",
         "pyyaml",
         "statsmodels",
         "tqdm",
