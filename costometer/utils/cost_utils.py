@@ -15,7 +15,7 @@ from mouselab.metacontroller.vanilla_BMPS import load_feature_file
 from mouselab.mouselab import MouselabEnv
 from numpy.random import default_rng
 
-from costometer.utils.trace_utils import adjust_ground_truth, adjust_state
+from .trace_utils import adjust_ground_truth, adjust_state
 
 
 def save_q_values_for_cost(

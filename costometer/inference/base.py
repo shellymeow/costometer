@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from costometer.utils import traces_to_df
+from ..utils import traces_to_df
 
 
 class BaseInference:

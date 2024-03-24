@@ -17,10 +17,17 @@ from scipy import stats  # noqa
 from scipy.stats import rv_continuous
 from statsmodels.tools.eval_measures import bic
 
-from costometer.agents import SymmetricMouselabParticipant
-from costometer.utils.cost_utils import adjust_state, get_state_action_values
-from costometer.utils.plotting_utils import generate_model_palette
-from costometer.utils.trace_utils import get_trajectories_from_participant_data
+from ..agents import SymmetricMouselabParticipant
+from .cost_utils import adjust_state, get_state_action_values
+from .data_models import (
+    AnalysisDetails,
+    CostDetails,
+    ExperimentDetails,
+    SessionDetails,
+    SimulatedSessionDetails,
+)
+from .plotting_utils import generate_model_palette
+from .trace_utils import get_trajectories_from_participant_data
 
 
 def get_best_parameters(

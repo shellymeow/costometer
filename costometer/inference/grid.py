@@ -8,9 +8,9 @@ import pandas as pd
 from mouselab.distributions import Categorical
 from tqdm import tqdm
 
-from costometer.agents.vanilla import Participant
-from costometer.inference.base import BaseInference
-from costometer.utils import adjust_state, traces_to_df
+from ..agents.vanilla import Participant
+from ..utils import adjust_state, traces_to_df
+from .base import BaseInference
 
 
 class GridInference(BaseInference):

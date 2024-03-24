@@ -4,7 +4,7 @@ from typing import Dict, Tuple, Union
 
 from gym.envs.toy_text.discrete import DiscreteEnv
 
-from costometer.envs.modified_mouselab import ModifiedMouseLabEnv
+from ..envs.modified_mouselab import ModifiedMouseLabEnv
 
 
 def flatten_q(

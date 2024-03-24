@@ -1,1 +1,1 @@
-from costometer.agents.vanilla import SymmetricMouselabParticipant
+from .vanilla import SymmetricMouselabParticipant

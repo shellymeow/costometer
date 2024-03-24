@@ -8,7 +8,7 @@ from mouselab.agents import Agent
 from mouselab.distributions import Categorical
 from mouselab.mouselab import MouselabEnv
 
-from costometer.utils.trace_utils import adjust_ground_truth, adjust_state
+from ..utils.trace_utils import adjust_ground_truth, adjust_state
 
 
 class Participant:
