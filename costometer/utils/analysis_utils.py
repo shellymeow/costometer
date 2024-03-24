@@ -2,17 +2,17 @@
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import dill as pickle
 import numpy as np
 import pandas as pd
-import yaml
 from more_itertools import powerset
 from mouselab.cost_functions import *  # noqa
 from mouselab.distributions import Categorical
 from mouselab.graph_utils import get_structure_properties
 from mouselab.policies import SoftmaxPolicy
+from pydantic_yaml import parse_yaml_raw_as
 from scipy import stats  # noqa
 from scipy.stats import rv_continuous
 from statsmodels.tools.eval_measures import bic
@@ -32,7 +32,7 @@ from .trace_utils import get_trajectories_from_participant_data
 
 def get_best_parameters(
     df: pd.DataFrame,
-    cost_details: Dict[str, Any],
+    cost_details: CostDetails,
     priors: Dict[Any, Any],
 ):
     """
@@ -203,7 +203,7 @@ def extract_mles_and_maps(
     """
     Extract best MLEs and MAPs from dataframe.
 
-    :param data:
+    :param data: TODO better information
     :param cost_details:
     :params priors:
     :return:
@@ -269,11 +269,11 @@ class AnalysisObject:
         self.read_experiment_yaml()
         self.load_cost_function_details()
 
-        if not hasattr(self, "palette_name"):
-            self.palette_name = experiment_name
+        if not hasattr(self.analysis_details, "palette_name"):
+            self.analysis_details.palette_name = experiment_name
 
         dfs = {}
-        for session in self.sessions:
+        for session in self.analysis_details.sessions:
             matching_files = (self.irl_path / "data" / "processed" / f"{session}").glob(
                 "*.csv"
             )
@@ -288,7 +288,7 @@ class AnalysisObject:
 
         self.dfs = {file_type: pd.concat(df_list) for file_type, df_list in dfs.items()}
 
-        if not self.simulated:
+        if not self.analysis_details.simulated:
             self.load_session_details()
         else:
             # create 'num_clicks'
@@ -298,10 +298,10 @@ class AnalysisObject:
             self.dfs["mouselab-mdp"]["block"] = "test"
 
             self.session_details = {
-                session: {
-                    "experiment_setting": session.split("/")[1],
-                }
-                for session in self.sessions
+                session: SimulatedSessionDetails(
+                    experiment_setting=session.split("/")[1],
+                )
+                for session in self.analysis_details.sessions
             }
 
         # only programmed correctly if all sessions have same experiment setting
@@ -309,7 +309,7 @@ class AnalysisObject:
             len(
                 np.unique(
                     [
-                        session_details["experiment_setting"]
+                        session_details.experiment_setting
                         for session_details in self.session_details.values()
                     ]
                 )
@@ -317,11 +317,11 @@ class AnalysisObject:
             == 1
         )
         self.experiment_setting = [
-            session_details["experiment_setting"]
+            session_details.experiment_setting
             for session_details in self.session_details.values()
         ][0]
 
-        yaml_path = (
+        yaml_file = (
             self.irl_path
             / "data"
             / "inputs"
@@ -329,8 +329,9 @@ class AnalysisObject:
             / "experiment_settings"
             / f"{self.experiment_setting}.yaml"
         )
-        with open(yaml_path, "r") as stream:
-            self.experiment_details = yaml.safe_load(stream)
+        with open(yaml_file, "r", encoding="utf-8") as f:
+            raw_yaml = f.read()
+        self.experiment_details = parse_yaml_raw_as(ExperimentDetails, raw_yaml)
 
         self.optimization_data = self.load_optimization_data()
 
@@ -359,14 +360,15 @@ class AnalysisObject:
             / "inputs"
             / "yamls"
             / "cost_functions"
-            / f"{self.cost_function}.yaml"
+            / f"{self.analysis_details.cost_function}.yaml"
         )
-        with open(str(yaml_file), "r") as stream:
-            self.cost_details = yaml.safe_load(stream)
+        with open(yaml_file, "r", encoding="utf-8") as f:
+            raw_yaml = f.read()
+        self.cost_details = parse_yaml_raw_as(CostDetails, raw_yaml)
 
     def load_session_details(self):
         self.session_details = {}
-        for session in self.sessions:
+        for session in self.analysis_details.sessions:
             yaml_file = (
                 self.irl_path
                 / "data"
@@ -375,12 +377,15 @@ class AnalysisObject:
                 / "experiments"
                 / f"{session}.yaml"
             )
-            with open(str(yaml_file), "r") as stream:
-                self.session_details[session] = yaml.safe_load(stream)
+            with open(yaml_file, "r", encoding="utf-8") as f:
+                raw_yaml = f.read()
+            self.session_details[session] = parse_yaml_raw_as(SessionDetails, raw_yaml)
 
     def load_optimization_data(self):
         full_dfs = []
         self.model_name_mapping = {}
+
+        # TODO when multiple blocks
         mle_and_map_files = [
             (
                 session,
@@ -388,9 +393,9 @@ class AnalysisObject:
                 / "data"
                 / "processed"
                 / f"{session}"
-                / f"{self.cost_function}"
+                / f"{self.analysis_details.cost_function}"
                 / "mle_and_map"
-                / f"{'_' + self.block if self.block != 'test' else ''}_{pid}.pickle",
+                f"{'_' + self.analysis_details.block if self.analysis_details.block != 'test' else ''}_{pid}.pickle",
             )
             for session, pid in self.dfs["mouselab-mdp"][["session", "pid"]]
             .drop_duplicates()
@@ -419,16 +424,12 @@ class AnalysisObject:
             )
             for prior, prior_dict in data["SoftmaxPolicy"].items():
                 all_params = max(prior_dict, key=len)
-
-                if self.included_parameters == "":
-                    included_parameters = set()
-                else:
-                    included_parameters = set(self.included_parameters.split(","))
+                included_parameters = set(self.analysis_details.included_parameters)
 
                 for model, model_df in prior_dict.items():
                     if set(model).intersection(included_parameters) == set():
                         must_contain = set(all_params) - set(
-                            self.cost_details["constant_values"]
+                            self.cost_details.constant_values
                         )
                         # in some cases, if we used a larger base cost model we will
                         # have an entry with param X held constant and not
@@ -438,10 +439,10 @@ class AnalysisObject:
                             varied_parameters = set(all_params) - set(model)
                             number_parameters = len(varied_parameters)
                             cost_params_in_model = varied_parameters.intersection(
-                                set(self.cost_details["cost_parameter_args"])
+                                set(self.cost_details.cost_parameter_args)
                             )
                             additional_params_in_model = varied_parameters.difference(
-                                set(self.cost_details["cost_parameter_args"])
+                                set(self.cost_details.cost_parameter_args)
                             )
 
                             if len(cost_params_in_model) > 0:
@@ -449,7 +450,7 @@ class AnalysisObject:
                                     "$"
                                     + ", ".join(
                                         [
-                                            self.cost_details["latex_mapping"][param]
+                                            self.cost_details.latex_mapping[param]
                                             for param in sorted(cost_params_in_model)
                                         ]
                                     )
@@ -464,7 +465,7 @@ class AnalysisObject:
                                     + " with $"
                                     + ", ".join(
                                         [
-                                            self.cost_details["latex_mapping"][param]
+                                            self.cost_details.latex_mapping[param]
                                             for param in sorted(
                                                 additional_params_in_model
                                             )
@@ -500,14 +501,14 @@ class AnalysisObject:
 
         mouselab_data = self.dfs["mouselab-mdp"]
         # human data does not include terminal actions in num clicks
-        if not self.simulated:
+        if not self.analysis_details.simulated:
             mouselab_data["num_clicks"] = (
                 mouselab_data["num_clicks"] + 1
             )  # add terminal action
         full_df = self.join_optimization_df_and_processed(
             optimization_df=full_df,
             processed_df=mouselab_data[
-                mouselab_data["block"].isin(self.block.split(","))
+                mouselab_data["block"].isin(self.analysis_details.block.split(","))
             ]
             .groupby(["pid"], as_index=False)
             .sum(),
@@ -539,11 +540,9 @@ class AnalysisObject:
             / "yamls"
             / f"{self.experiment_name}.yaml"
         )
-        with open(str(yaml_file), "r") as stream:
-            yaml_dict = yaml.safe_load(stream)
-        # append all entries in yaml_dict as attributes
-        for key in yaml_dict:
-            setattr(self, key, yaml_dict[key])
+        with open(yaml_file, "r", encoding="utf-8") as f:
+            raw_yaml = f.read()
+        self.analysis_details = parse_yaml_raw_as(AnalysisDetails, raw_yaml)
 
     @staticmethod
     def join_optimization_df_and_processed(
@@ -598,24 +597,28 @@ class AnalysisObject:
             trial_by_trial_file.parents[0].mkdir(parents=True, exist_ok=True)
 
             all_trial_by_trial = {}
-            for excluded_parameters in self.trial_by_trial_models:
+            for (
+                excluded_parameter_string,
+                excluded_parameters,
+            ) in self.analysis_details.trial_by_trial_models_mapping.items():
                 curr_trial_by_trial = self.compute_trial_by_trial_likelihoods(
                     excluded_parameters=excluded_parameters,
                 )
-                all_trial_by_trial[excluded_parameters] = curr_trial_by_trial
+                all_trial_by_trial[excluded_parameter_string] = curr_trial_by_trial
 
             with open(trial_by_trial_file, "wb") as f:
                 pickle.dump(all_trial_by_trial, f)
 
         avg_trial = []
-        for excluded_parameters in self.trial_by_trial_models:
-            participant_lik_trial_dicts = all_trial_by_trial[excluded_parameters]
+        for (
+            excluded_parameter_string,
+            excluded_parameters,
+        ) in self.analysis_details.trial_by_trial_models_mapping.items():
+            participant_lik_trial_dicts = all_trial_by_trial[excluded_parameter_string]
             if excluded_parameters == "":
                 model_name = self.model_name_mapping[()]
             else:
-                model_name = self.model_name_mapping[
-                    tuple(sorted(excluded_parameters.split(",")))
-                ]
+                model_name = self.model_name_mapping[excluded_parameters]
 
             avg_trial.extend(
                 [
@@ -624,7 +627,8 @@ class AnalysisObject:
                         sum([np.exp(action_ll) for action_ll in trial_ll])
                         / len(trial_ll),
                         model_name,
-                        excluded_parameters == self.excluded_parameters,
+                        excluded_parameters
+                        == self.analysis_details.excluded_parameters,
                         trial_num,
                     ]
                     for pid, all_ll in participant_lik_trial_dicts.items()
@@ -655,7 +659,7 @@ class AnalysisObject:
             / "inputs"
             / "exp_inputs"
             / "structure"
-            / f"{self.experiment_details['structure']}.json"
+            / f"{self.experiment_details.structure}.json"
         )
         with open(
             structure_file,
@@ -670,19 +674,17 @@ class AnalysisObject:
                 experiment_setting=experiment_setting,
                 bmps_file="Myopic_VOC",
                 bmps_path=self.irl_path / "cluster" / "parameters" / "bmps",
-                cost_function=eval(self.cost_details["cost_function"]),
+                cost_function=eval(self.cost_details.cost_function),
                 cost_parameters=cost_parameters,
                 structure=structure_dicts,
-                env_params=self.cost_details["env_params"],
+                env_params=self.cost_details.env_params,
                 kappa=a,
                 gamma=g,
             )
         )
 
         pid_to_best_params = (
-            optimization_data[
-                list(self.cost_details["constant_values"]) + ["trace_pid"]
-            ]
+            optimization_data[list(self.cost_details.constant_values) + ["trace_pid"]]
             .set_index("trace_pid")
             .to_dict("index")
         )
@@ -692,21 +694,19 @@ class AnalysisObject:
             traces = get_trajectories_from_participant_data(
                 self.dfs["mouselab-mdp"][self.dfs["mouselab-mdp"]["pid"] == pid],
                 experiment_setting=experiment_setting,
-                include_last_action=self.cost_details["env_params"][
-                    "include_last_action"
-                ],
+                include_last_action=self.cost_details.env_params.include_last_action,
             )
 
             policy_kwargs = {
                 key: val
                 for key, val in config.items()
-                if key not in self.cost_details["cost_parameter_args"]
+                if key not in self.cost_details.cost_parameter_args
             }
 
             cost_kwargs = {
                 key: val
                 for key, val in config.items()
-                if key in self.cost_details["cost_parameter_args"]
+                if key in self.cost_details.cost_parameter_args
             }
 
             policy_kwargs["noise"] = 0
@@ -719,10 +719,10 @@ class AnalysisObject:
                 policy_function=SoftmaxPolicy,
                 additional_mouselab_kwargs={
                     "mdp_graph_properties": structure_dicts,
-                    **self.cost_details["env_params"],
+                    **dict(self.cost_details.env_params),
                 },
                 num_trials=max([len(trace["actions"]) for trace in traces]),
-                cost_function=eval(self.cost_details["cost_function"]),
+                cost_function=eval(self.cost_details.cost_function),
                 cost_kwargs=cost_kwargs,
                 policy_kwargs={
                     key: val
@@ -751,7 +751,7 @@ class AnalysisObject:
                     [
                         sum(trial_ll)
                         for block, trial_ll in zip(trace["block"], trial_by_trial[pid])
-                        if block in self.block.split(",")
+                        if block in self.analysis_details.blocks
                     ]
                 )
                 assert (
@@ -763,12 +763,12 @@ class AnalysisObject:
 
         return trial_by_trial
 
-    def load_hdi_ranges(self, excluded_parameters: str = None):
-        if excluded_parameters is None:
-            excluded_parameters = self.excluded_parameters
+    def load_hdi_ranges(self, excluded_parameter_str: str = None):
+        if excluded_parameter_str is None:
+            excluded_parameter_str = self.analysis_details.excluded_parameter_str
 
-        if excluded_parameters != "":
-            file_end = "_" + excluded_parameters
+        if excluded_parameter_str != "":
+            file_end = "_" + excluded_parameter_str
         else:
             file_end = ""
 
@@ -781,9 +781,9 @@ class AnalysisObject:
                 / "cluster"
                 / "data"
                 / "marginal_hdi"
-                / f"{self.cost_function}"
+                / f"{self.cost_details.cost_function_name}"
                 / f"{session}"
-                / f"{self.block}_{self.prior}_hdi_{pid}{file_end}.pickle"
+                / f"{self.analysis_details.block}_{self.analysis_details.prior}_hdi_{pid}{file_end}.pickle"
             )
             with open(
                 hdi_file,
@@ -796,29 +796,26 @@ class AnalysisObject:
     def query_optimization_data(
         self,
         prior: str = None,
-        include_null: bool = None,
-        excluded_parameters: str = None,
+        excluded_parameters: list = None,
     ) -> pd.DataFrame:
         if prior is None:
-            prior = self.prior
-        if include_null is None:
-            include_null = self.include_null
+            prior = self.analysis_details.prior
 
         subset = self.optimization_data[
             (self.optimization_data["applied_policy"] == "SoftmaxPolicy")
             & (self.optimization_data["prior"] == prior)
         ].copy(deep=True)
-        if include_null:
-            # random policy doesn't have prior
-            subset = pd.concat(
-                [
-                    subset,
-                    self.optimization_data[
-                        (self.optimization_data["applied_policy"] == "RandomPolicy")
-                        & (self.optimization_data["prior"] == prior)
-                    ].copy(deep=True),
-                ]
-            )
+
+        # random policy doesn't have prior
+        subset = pd.concat(
+            [
+                subset,
+                self.optimization_data[
+                    (self.optimization_data["applied_policy"] == "RandomPolicy")
+                    & (self.optimization_data["prior"] == prior)
+                ].copy(deep=True),
+            ]
+        )
 
         if excluded_parameters is None:
             return subset
@@ -829,6 +826,6 @@ class AnalysisObject:
         else:
             return subset[
                 subset["model"].apply(
-                    lambda model: set(model) == set(excluded_parameters.split(","))
+                    lambda model: set(model) == set(excluded_parameters)
                 )
             ].copy(deep=True)
