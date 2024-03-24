@@ -2,6 +2,7 @@ import numpy as np
 
 
 def get_pval_text(p_val):
+    """Report p-value in latex."""
     if p_val < 0.001:
         ptext = "p < 0.001"
     else:
@@ -10,6 +11,7 @@ def get_pval_text(p_val):
 
 
 def get_pval_string(p_val):
+    """Get significance stars for p-value."""
     if p_val > 0.05:
         return ""
     elif p_val < 0.001:
@@ -21,6 +23,7 @@ def get_pval_string(p_val):
 
 
 def get_mann_whitney_text(comparison):
+    """Get Mann-Whitney test report."""
     return (
         f"Mann-Whitney $U={comparison['U-val'].values[0]:.2f}$, "
         f"${get_pval_text(comparison['p-val'].values[0])}$, "
@@ -29,6 +32,7 @@ def get_mann_whitney_text(comparison):
 
 
 def get_wilcoxon_text(comparison):
+    """Get Wilcoxon test report."""
     return (
         f"$W = {comparison['W-val'].values[0]:.2f}$, "
         f"$\\text{{RBC}} = {comparison['RBC'].values[0]:.2f}$,"
@@ -38,6 +42,7 @@ def get_wilcoxon_text(comparison):
 
 
 def get_friedman_test_text(comparison):
+    """Get Friedman test report."""
     return (
         f"$\\chi^2({comparison.ddof1[0]}) = "
         f"{comparison.Q[0]:.3f}$, "
@@ -46,6 +51,7 @@ def get_friedman_test_text(comparison):
 
 
 def get_kruskal_wallis_text(comparison):
+    """Get Kruskal-Wallis test report."""
     return (
         f"Kruskal-Wallis $H({comparison['ddof1'].values[0]})"
         f" = {comparison['H'].values[0]:.2f}$, "
@@ -54,6 +60,7 @@ def get_kruskal_wallis_text(comparison):
 
 
 def get_correlation_text(correlation, table=False):
+    """Get correlation test report."""
     if np.any(np.isnan(correlation["CI95%"][0])):
         return "Potentially no variance of one parameter..."
 
@@ -82,6 +89,7 @@ def get_correlation_text(correlation, table=False):
 
 
 def get_ttest_text(comparison):
+    """Get t-test report."""
     if isinstance(comparison["dof"].values[0], int) or isinstance(
         comparison["dof"].values[0], np.int64
     ):
@@ -95,6 +103,7 @@ def get_ttest_text(comparison):
 
 
 def get_regression_text(regression_res, pval=None):
+    """Get regression test report."""
     if pval is None:
         pval = regression_res.f_pvalue
 
@@ -106,6 +115,7 @@ def get_regression_text(regression_res, pval=None):
 
 
 def get_parameter_coefficient(regression_res, param, pval=None):
+    """Get regression parameter coefficient report."""
     if pval is None:
         pval = regression_res.pvalues[param]
 
@@ -118,6 +128,7 @@ def get_parameter_coefficient(regression_res, param, pval=None):
 
 
 def get_anova_text(anova_object):
+    """Get ANOVA test report."""
     anova_text = ""
     for _, row in anova_object.iterrows():
         anova_text = (

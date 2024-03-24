@@ -25,6 +25,7 @@ def set_font_sizes(small_size=16, medium_size=20, bigger_size=30):
 
 
 def generate_model_palette(model_names):
+    """Generate palette for different models."""
     static_palette = {
         model: sns.color_palette(cc.glasbey_category10, n_colors=len(model_names))[
             model_idx
@@ -35,6 +36,7 @@ def generate_model_palette(model_names):
 
 
 def get_static_palette(static_directory, experiment_name):
+    """Get palette for experiment."""
     palette_file = (
         static_directory / "data" / f"{experiment_name}_models_palette.pickle"
     )
